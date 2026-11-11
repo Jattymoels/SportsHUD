@@ -10,6 +10,12 @@
 //   afterwards - projectRecording: a second, backward pass lets every
 //                estimate also use the fixes that came after it.
 //
+// Away from the route there is nothing to measure progress against. A fix
+// that is well off the route, from someone not travelling along it, holds
+// progress where it was; the first fix back on the route picks it up again
+// from wherever that is. (Someone far from the route but moving along it,
+// on the other side of a wide road say, still counts as on it.)
+//
 // Nothing here knows what sport is being done.
 
 import { snapToRoute } from './route.js';
@@ -21,6 +27,8 @@ export const PROGRESS_DEFAULTS = {
   startSpeedSigma: 5, // m/s: how uncertain the speed is at the first fix
   headingBaseline: 3, // metres moved before the direction of travel is trusted
   headingMaxAge: 15, // seconds: older movement says nothing about the current direction
+  offRoute: 15, // metres from the route beyond which a fix may count as off it
+  alongRoute: 0.8, // how closely travel must follow the route's direction (1 = exactly) to count as on it anyway
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -28,7 +36,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 /** The filter itself. `update` returns the state before and after the fix. */
 function createFilter(route, options) {
   const o = { ...PROGRESS_DEFAULTS, ...options };
-  let s = null; // { t, d, v, p00, p01, p11, offset }
+  let s = null; // { t, d, v, p00, p01, p11, offset, offRoute }
   const trail = []; // recent fixes as { t, x, y }, newest last
 
   /** Direction of travel as a unit vector, from the recent fixes; null if barely moving. */
@@ -57,31 +65,54 @@ function createFilter(route, options) {
     };
   }
 
+  /**
+   * Take in one fix. Returns the state before and after it. `cut` marks a
+   * fix that held or re-set progress rather than refining it; estimates on
+   * either side of a cut say nothing about each other.
+   */
   function update(fix) {
-    // A fix the browser reports as inaccurate, or one that lands far from
+    if (s && !(fix.t > s.t)) return null;
+    // A fix the browser reports as inaccurate, or one that lands away from
     // the route, is trusted less rather than thrown away.
     const baseSigma = Math.max(o.gpsSigma, 0.7 * (fix.accuracy ?? 0));
-
-    if (s && !(fix.t > s.t)) return null;
     const [x, y] = route.proj.toXY(fix.lat, fix.lon);
     const heading = headingTo(fix.t, x, y);
+    const isOff = (snap) => {
+      if (snap.offset <= Math.max(o.offRoute, 3 * baseSigma)) return false;
+      const along = heading ? Math.abs(heading[0] * snap.dir[0] + heading[1] * snap.dir[1]) : 0;
+      return along < o.alongRoute;
+    };
 
     if (!s) {
       const snap = snapToRoute(route, fix.lat, fix.lon);
       const sigma = Math.max(baseSigma, snap.offset / 2);
-      s = { t: fix.t, d: snap.dist, v: 0, p00: sigma ** 2, p01: 0, p11: o.startSpeedSigma ** 2, offset: snap.offset };
-      return { pred: s, filt: s };
+      s = { t: fix.t, d: snap.dist, v: 0, p00: sigma ** 2, p01: 0, p11: o.startSpeedSigma ** 2, offset: snap.offset, offRoute: isOff(snap) };
+      return { pred: s, filt: s, cut: true };
     }
+
     const pred = predict(fix.t);
+    const expected = s.offRoute ? s.d : pred.d;
     const predSigma = Math.sqrt(pred.p00);
     const snap = snapToRoute(route, fix.lat, fix.lon, {
-      near: clamp(pred.d, 0, route.length),
+      near: clamp(expected, 0, route.length),
       window: o.window + 3 * predSigma,
       nearSigma: Math.max(predSigma, o.window / 2),
       gpsSigma: baseSigma,
       heading,
     });
     const sigma = Math.max(baseSigma, snap.offset / 2);
+
+    if (isOff(snap)) {
+      // Hold progress; let the uncertainty grow so the search widens.
+      s = { t: fix.t, d: s.d, v: s.v, p00: pred.p00, p01: pred.p01, p11: pred.p11, offset: snap.offset, offRoute: true };
+      return { pred: s, filt: s, cut: true };
+    }
+    if (s.offRoute) {
+      // Back on the route: take the position as found and keep the old speed.
+      s = { t: fix.t, d: snap.dist, v: s.v, p00: sigma ** 2, p01: 0, p11: pred.p11, offset: snap.offset, offRoute: false };
+      return { pred: s, filt: s, cut: true };
+    }
+
     const k0 = pred.p00 / (pred.p00 + sigma ** 2);
     const k1 = pred.p01 / (pred.p00 + sigma ** 2);
     const innovation = snap.dist - pred.d;
@@ -93,8 +124,9 @@ function createFilter(route, options) {
       p01: (1 - k0) * pred.p01,
       p11: pred.p11 - k1 * pred.p01,
       offset: snap.offset,
+      offRoute: false,
     };
-    return { pred, filt: s };
+    return { pred, filt: s, cut: false };
   }
 
   return { update, state: () => s };
@@ -116,9 +148,10 @@ export function createProgressTracker(route, options) {
     },
     /**
      * Progress at time `t`, at or after the latest fix.
-     * @returns {{t:number, dist:number, speed:number, offset:number, fixAge:number}|null}
+     * @returns {{t:number, dist:number, speed:number, offset:number, fixAge:number, offRoute:boolean}|null}
      *   dist: metres along the route. speed: m/s. offset: metres between the
      *   latest fix and the route. fixAge: seconds since the latest fix.
+     *   offRoute: progress is being held because the latest fix was off the route.
      */
     at(t) {
       const s = filter.state();
@@ -126,10 +159,11 @@ export function createProgressTracker(route, options) {
       const fixAge = Math.max(0, t - s.t);
       return {
         t,
-        dist: clamp(s.d + s.v * fixAge, 0, route.length),
+        dist: clamp(s.d + (s.offRoute ? 0 : s.v * fixAge), 0, route.length),
         speed: s.v,
         offset: s.offset,
         fixAge,
+        offRoute: s.offRoute,
       };
     },
   };
@@ -154,12 +188,18 @@ export function projectRecording(route, fixes, options) {
   if (n === 0) throw new Error('Recording has no usable fixes');
 
   // Backward (Rauch-Tung-Striebel) pass over the forward filter's states.
+  // It stops at each cut: hindsight does not reach across one.
   const d = new Float64Array(n);
   const v = new Float64Array(n);
   d[n - 1] = steps[n - 1].filt.d;
   v[n - 1] = steps[n - 1].filt.v;
   for (let k = n - 2; k >= 0; k--) {
     const f = steps[k].filt;
+    if (steps[k + 1].cut) {
+      d[k] = f.d;
+      v[k] = f.v;
+      continue;
+    }
     const p = steps[k + 1].pred;
     const dt = steps[k + 1].filt.t - f.t;
     const m00 = f.p00 + f.p01 * dt;

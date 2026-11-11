@@ -90,6 +90,54 @@ test('an inaccurate fix moves the estimate less than an accurate one', () => {
   assert.ok(run(40) < run(5) - 3);
 });
 
+test('cutting a corner: progress is held while off the route, then picked up where the route is rejoined', () => {
+  // Route goes 300 m east then 300 m north. The runner leaves it 60 m before
+  // the corner and cuts straight across to 60 m after it.
+  const route = buildRoute(path([[0, 0], [300, 0], [300, 300]]));
+  const taken = path([[0, 0], [240, 0], [300, 60], [300, 300]]);
+  const tracker = createProgressTracker(route);
+  let held = 0;
+  let fastest = 0;
+  for (const fix of steady(taken, 3)) {
+    tracker.update(fix);
+    const now = tracker.at(fix.t);
+    if (now.offRoute) held++;
+    fastest = Math.max(fastest, now.speed);
+    if (fix.t === 60) near(now.dist, 180, 1, 'before the shortcut');
+    if (fix.t === 90) assert.equal(now.offRoute, true, 'mid-shortcut, 30 m from the route');
+    if (fix.t === 90) assert.ok(now.dist > 230 && now.dist < 300, `held at ${now.dist.toFixed(0)} m`);
+    // 85 m of shortcut replaces 120 m of route, so by t = 140 the runner is 35 m further along than 3 m/s alone would give.
+    if (fix.t === 140) near(now.dist, 140 * 3 + 120 - Math.hypot(60, 60), 3, 'after rejoining');
+  }
+  assert.ok(held >= 5 && held <= 30, `held for ${held} s`);
+  assert.ok(fastest < 4, `speed estimate reached ${fastest.toFixed(1)} m/s for a 3 m/s runner`);
+});
+
+test('far from the route but travelling along it still counts as on it', () => {
+  // The other side of a wide road: 25 m to one side, same direction.
+  const route = buildRoute(straight);
+  const tracker = createProgressTracker(route);
+  for (const fix of steady(path([[0, 25], [400, 25]]), 3)) {
+    tracker.update(fix);
+    const now = tracker.at(fix.t);
+    if (fix.t < 2) continue; // no direction of travel yet
+    assert.equal(now.offRoute, false, `t=${fix.t}`);
+    if (fix.t >= 10) near(now.dist, fix.t * 3, 1.5, `t=${fix.t}`); // once the speed estimate has settled
+  }
+});
+
+test('hindsight does not reach across a stretch off the route', () => {
+  const route = buildRoute(path([[0, 0], [300, 0], [300, 300]]));
+  const fixes = steady(path([[0, 0], [240, 0], [300, 60], [300, 300]]), 3);
+  const profile = projectRecording(route, fixes);
+  const tracker = createProgressTracker(route);
+  fixes.forEach((fix, i) => {
+    tracker.update(fix);
+    // Afterwards and live agree to within a few metres throughout, including at the jump.
+    near(profile.dist[i], tracker.at(fix.t).dist, 4, `t=${fix.t}`);
+  });
+});
+
 test('projectRecording gives progress for a whole recording', () => {
   const route = buildRoute(straight);
   const fixes = steady(straight, 2.5);

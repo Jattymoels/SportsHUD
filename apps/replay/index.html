@@ -10,7 +10,7 @@
   <header class="top">
     <a class="home" href="../../">SportsHUD</a>
     <h1>Replay harness</h1>
-    <p class="lede">Plays one recording back as if it were happening now, and shows the live gap to a second recording of the same route: the ghost.</p>
+    <p class="lede">Plays one recording back as if it were happening now, and shows the live gap to a ghost: either a second recording of the same route, or a set pace on any route.</p>
   </header>
 
   <main>
@@ -30,6 +30,18 @@
           <option value="elapsed">Clock never stops (races)</option>
         </select>
       </label>
+    </section>
+    <section class="bar" aria-label="Ghost">
+      <label>Ghost
+        <select id="ghostMode">
+          <option value="track">A recording of this route (the Ghost GPX)</option>
+          <option value="pace">A set pace, on any route</option>
+        </select>
+      </label>
+      <label id="paceBox" hidden>Ghost's pace, minutes:seconds per km
+        <input id="ghostPace" type="text" inputmode="numeric" value="5:00" size="6" autocomplete="off">
+      </label>
+      <button id="usePace" type="button" hidden>Use the Ghost GPX's average pace</button>
     </section>
     <p id="message" role="status" hidden></p>
 
@@ -61,7 +73,7 @@
       <section class="card" aria-label="Map">
         <h2>Route</h2>
         <ul class="legend">
-          <li><span class="key dot you"></span>You, snapped to the route</li>
+          <li><span class="key dot you"></span><span id="youKey">You, snapped to the route</span></li>
           <li><span class="key dot ghost"></span>Ghost</li>
           <li><span class="key dot raw"></span>Raw GPS fix</li>
         </ul>
@@ -73,7 +85,7 @@
         <ul class="legend">
           <li><span class="key line you"></span>Live</li>
           <li><span class="key line after"></span>Computed afterwards</li>
-          <li><span class="key band"></span>Afterwards ± 3 s (the B1 target)</li>
+          <li><span class="key band"></span>Afterwards ± 3 s (the target)</li>
         </ul>
         <div id="chart" class="plot chart"></div>
         <div id="tip" class="tip" hidden></div>
@@ -85,7 +97,7 @@
       </section>
 
       <section class="card wide" aria-label="B1 result">
-        <h2>B1 check for this pair <span id="verdict" class="chip"></span></h2>
+        <h2><span id="checkTitle">B1 check for this pair</span> <span id="verdict" class="chip"></span></h2>
         <p class="note">The whole recording is replayed in an instant when it loads. Each one-second live reading is compared with the gap computed afterwards from the complete recording.</p>
         <table id="b1" class="stats"></table>
       </section>

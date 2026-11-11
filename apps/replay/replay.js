@@ -1,7 +1,17 @@
 // Desk replay harness. Every number shown here comes from engine/; this file
 // only loads recordings, runs the clock and draws.
 
-import { parseGpx, checkB1, createReplay, pointAtDistance } from '../../engine/index.js';
+import {
+  parseGpx,
+  buildRoute,
+  pointAtDistance,
+  createGapTracker,
+  createPaceTracker,
+  paceOf,
+  createReplay,
+  checkB1,
+  checkPace,
+} from '../../engine/index.js';
 
 const FIXTURES = new URL('../../fixtures/', import.meta.url);
 const SPEEDS = [1, 2, 5, 10, 30, 60];
@@ -22,8 +32,8 @@ function svgEl(name, attrs = {}, parent = null, text = null) {
 const state = {
   pairs: [],
   custom: { ghost: null, runner: null },
-  loaded: null, // the two recordings on screen, kept so the clock can be switched
-  check: null, // the engine's B1 check for the loaded pair (route, ghost, whole-recording series)
+  loaded: null, // the recordings on screen, kept so the clock or the ghost can be switched
+  check: null, // the engine's check for what is loaded (route, whole-recording series, stats)
   replay: null,
   live: [], // one-second readings produced so far by the replay on screen
   time: 0, // seconds into the replayed recording
@@ -46,6 +56,14 @@ function clock(seconds) {
 }
 const signed = (value, digits) => (value < 0 ? MINUS : '+') + Math.abs(value).toFixed(digits);
 const percent = (share) => (100 * share).toFixed(1) + '%';
+
+/** "5:30" (or "5") as seconds per km; null if it is not a pace. */
+function parsePace(text) {
+  const match = /^\s*(\d{1,2})(?::([0-5]\d))?\s*$/.exec(text);
+  const seconds = match ? Number(match[1]) * 60 + Number(match[2] ?? 0) : 0;
+  return seconds >= 60 && seconds <= 1800 ? seconds : null;
+}
+const formatPace = (secondsPerKm) => clock(Math.round(secondsPerKm));
 
 // --------------------------------------------------------------- loading --
 
@@ -72,24 +90,44 @@ async function loadPair(id) {
 }
 
 function start(ghostRecording, runnerRecording) {
+  const mode = $('ghostMode').value;
+  const options = { clock: $('clockMode').value };
+  let makeTracker;
   try {
-    state.check = checkB1(ghostRecording, runnerRecording, { clock: $('clockMode').value });
+    if (mode === 'pace') {
+      const secondsPerKm = parsePace($('ghostPace').value);
+      if (!secondsPerKm) throw new Error('Enter the ghost\'s pace as minutes:seconds per km, for example 5:30.');
+      const result = checkPace(runnerRecording, secondsPerKm, options);
+      // No ghost route here: draw the runner's own track and put the ghost on it.
+      state.check = { ...result, mode, secondsPerKm, route: buildRoute(result.runnerFixes) };
+      makeTracker = () => createPaceTracker(result.speed);
+    } else {
+      if (!ghostRecording) throw new Error('Choose a Ghost GPX to race, or switch the ghost to a set pace.');
+      const result = checkB1(ghostRecording, runnerRecording, options);
+      state.check = { ...result, mode };
+      makeTracker = () => createGapTracker(result.route, result.ghost);
+    }
   } catch (error) {
     showMessage(error.message);
     return;
   }
   state.loaded = { ghost: ghostRecording, runner: runnerRecording };
-  const { route, ghost, runnerFixes, live } = state.check;
-  // Two recordings of different routes still produce numbers; say so.
-  const offsets = live.map((s) => s.offset).sort((a, b) => a - b);
-  const typical = offsets[Math.floor(offsets.length / 2)];
-  showMessage(typical > 25 ? `These two recordings are typically ${Math.round(typical)} m apart, so they may not follow the same route. The gap below will not mean much.` : null);
-  state.replay = createReplay(route, ghost, runnerFixes, { pauses: state.check.pauses });
+  const { runnerFixes, live } = state.check;
+  let warning = null;
+  if (mode === 'track') {
+    // Two recordings of different routes still produce numbers; say so.
+    const offsets = live.map((s) => s.offset).sort((a, b) => a - b);
+    const typical = offsets[Math.floor(offsets.length / 2)];
+    if (typical > 25) warning = `These two recordings are typically ${Math.round(typical)} m apart, so they may not follow the same route. The gap below will not mean much.`;
+  }
+  showMessage(warning);
+  state.replay = createReplay(runnerFixes, makeTracker, { pauses: state.check.pauses });
   state.live = [];
   state.time = 0;
   state.playing = false;
   state.tableBuilt = false;
   $('scrub').max = Math.floor(state.replay.duration);
+  $('youKey').textContent = mode === 'pace' ? 'You' : 'You, snapped to the route';
   buildMap();
   buildChart();
   renderB1();
@@ -106,14 +144,47 @@ async function chooseFile(role, input) {
     showMessage(`${file.name}: ${error.message}`);
     return;
   }
-  if (!state.custom.ghost || !state.custom.runner) {
-    showMessage(`Loaded ${file.name}. Now choose the ${role === 'ghost' ? 'second recording (yours)' : 'ghost recording'}.`);
+  const needsGhost = $('ghostMode').value === 'track';
+  if (!state.custom.runner) {
+    showMessage(`Loaded ${file.name}. Now choose your recording.`);
+    return;
+  }
+  if (needsGhost && !state.custom.ghost) {
+    showMessage(`Loaded ${file.name}. Now choose the ghost recording.`);
     return;
   }
   const select = $('pair');
   if (![...select.options].some((o) => o.value === 'custom')) select.add(new Option('Your files', 'custom'));
   select.value = 'custom';
   start(state.custom.ghost, state.custom.runner);
+}
+
+/** Show the pace controls only when the ghost is a set pace. */
+function showGhostMode() {
+  const pace = $('ghostMode').value === 'pace';
+  $('paceBox').hidden = !pace;
+  $('usePace').hidden = !pace;
+}
+
+function useGhostPace() {
+  const recording = state.loaded?.ghost ?? state.custom.ghost;
+  if (!recording) {
+    showMessage('Choose a Ghost GPX first; its average pace will be used.');
+    return;
+  }
+  try {
+    $('ghostPace').value = formatPace(paceOf(recording, { clock: $('clockMode').value }).secondsPerKm);
+  } catch (error) {
+    showMessage(error.message);
+    return;
+  }
+  restart();
+}
+
+/** Run again with the same recordings, after a setting has changed. */
+function restart() {
+  const recordings = state.loaded ?? state.custom;
+  if (recordings.runner) start(recordings.ghost, recordings.runner);
 }
 
 // ------------------------------------------------------------------- map --
@@ -323,10 +394,11 @@ function drawReadout(reading) {
   const side = size < 0.05 ? 'level' : gap > 0 ? 'ahead' : 'behind';
   $('timeGapSide').textContent = reading.finished ? `${side} at the finish` : side;
   $('distGap').textContent = `${signed(reading.distGap, 0)} m`;
-  $('dist').textContent = `${(reading.dist / 1000).toFixed(2)} of ${(route.length / 1000).toFixed(2)} km`;
+  const done = (reading.dist / 1000).toFixed(2);
+  $('dist').textContent = state.check.mode === 'pace' ? `${done} km` : `${done} of ${(route.length / 1000).toFixed(2)} km`;
   $('speedNow').textContent = `${(Math.max(0, reading.speed) * 3.6).toFixed(1)} km/h`;
   $('pace').textContent = reading.speed > 0.3 ? `${clock(1000 / reading.speed)} /km` : '–';
-  $('offset').textContent = `${reading.offset.toFixed(1)} m${reading.offRoute ? ' (off route)' : ''}`;
+  $('offset').textContent = reading.offset == null ? 'no route' : `${reading.offset.toFixed(1)} m${reading.offRoute ? ' (off route)' : ''}`;
   $('time').textContent = `${clock(reading.time)}${reading.paused ? ' (paused)' : ''}`;
 }
 
@@ -345,8 +417,12 @@ function renderB1() {
     if (error > Math.abs(live[worstAt].timeGap - afterwards[worstAt].timeGap)) worstAt = i;
   }
   const count = (n) => `${n.toLocaleString('en')} of ${stats.samples.toLocaleString('en')}`;
-  const paused = `you ${clock(stats.pausedS.runner)}, ghost ${clock(stats.pausedS.ghost)}`;
+  const paceGhost = state.check.mode === 'pace';
+  const km = (metres) => `${(metres / 1000).toFixed(2)} km`;
+  $('checkTitle').textContent = paceGhost ? 'Pace ghost check for this recording' : 'B1 check for this pair';
+  const paused = paceGhost ? `you ${clock(stats.pausedS.runner)}` : `you ${clock(stats.pausedS.runner)}, ghost ${clock(stats.pausedS.ghost)}`;
   const rows = [
+    ...(paceGhost ? [['Ghost', `holds ${formatPace(state.check.secondsPerKm)} per km on your route`]] : []),
     ['Clock', stats.clock === 'moving' ? `paused time not counted (${paused})` : 'never stops'],
     [`Live readings within ${stats.targetS} s of the gap computed afterwards, allowing a jump in the gap to land up to ${stats.slackS} s early or late`, `${percent(stats.within)} (${count(stats.samples - stats.misses.length)})`],
     [`Live readings within ${stats.targetS} s at exactly the same instant`, `${percent(stats.withinSameInstant)} (${count(stats.samples - stats.sameInstantMisses.length)})`],
@@ -355,10 +431,14 @@ function renderB1() {
     ['Largest difference in the distance gap', `${stats.maxDistError.toFixed(1)} m`],
     ['How often a reading is produced', `every ${stats.tickS} s`],
     ['Oldest GPS fix a reading had to work from', `${stats.maxFixAge.toFixed(0)} s`],
-    ['Places the ghost stood still', stats.ghostStops.count ? `${stats.ghostStops.count}, longest ${stats.ghostStops.longestS.toFixed(0)} s` : 'none'],
     ['Holes in your recording (watch paused), filled in for the replay', stats.holes.count ? `${stats.holes.count}, longest ${stats.holes.longestS.toFixed(0)} s` : 'none'],
-    ["Time you were off the ghost's route, with progress held", `${stats.offRouteS} s`],
-    ['Route length, from the ghost recording', `${(route.length / 1000).toFixed(2)} km`],
+    ...(paceGhost
+      ? [['Distance measured, live and afterwards', `${km(stats.distance.live)} and ${km(stats.distance.afterwards)}`]]
+      : [
+          ['Places the ghost stood still', stats.ghostStops.count ? `${stats.ghostStops.count}, longest ${stats.ghostStops.longestS.toFixed(0)} s` : 'none'],
+          ["Time you were off the ghost's route, with progress held", `${stats.offRouteS} s`],
+          ['Route length, from the ghost recording', km(route.length)],
+        ]),
   ];
   const table = $('b1');
   table.replaceChildren();
@@ -489,9 +569,16 @@ async function init() {
   $('restart').addEventListener('click', () => seek(0));
   $('speed').addEventListener('change', (event) => setSpeed(Number(event.target.value)));
   if (params.get('clock') === 'elapsed') $('clockMode').value = 'elapsed';
-  $('clockMode').addEventListener('change', () => {
-    if (state.loaded) start(state.loaded.ghost, state.loaded.runner);
+  $('clockMode').addEventListener('change', restart);
+  if (params.get('ghost') === 'pace') $('ghostMode').value = 'pace';
+  if (parsePace(params.get('pace') ?? '')) $('ghostPace').value = params.get('pace');
+  showGhostMode();
+  $('ghostMode').addEventListener('change', () => {
+    showGhostMode();
+    restart();
   });
+  $('ghostPace').addEventListener('change', restart);
+  $('usePace').addEventListener('click', useGhostPace);
   $('scrub').addEventListener('input', (event) => seek(Number(event.target.value)));
   $('pair').addEventListener('change', (event) => {
     if (event.target.value === 'custom') start(state.custom.ghost, state.custom.runner);

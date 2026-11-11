@@ -11,8 +11,8 @@ Build 1 of the spec: the track engine and a desk replay harness.
 
 | Folder | What it holds |
 | --- | --- |
-| `engine/` | The track engine: reads GPX, snaps positions to a route, measures distance along it, and computes the time and distance gap to a ghost. A plain JavaScript library with no display code and nothing sport-specific. Tests are in `engine/tests/`. |
-| `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap against a second recording. |
+| `engine/` | The track engine: reads GPX, snaps positions to a route, measures distance along it or without it, and computes the time and distance gap to a ghost. The ghost is either a recording of the same route or a set pace on any route. A plain JavaScript library with no display code and nothing sport-specific. Tests are in `engine/tests/`. |
+| `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to either kind of ghost. |
 | `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. |
 | `tools/` | A small local web server and a command-line B1 report. |
 | `docs/` | The spec and research notes. |
@@ -90,6 +90,16 @@ The **live** gap uses only the positions received so far, and is read once a sec
 - *With 2 seconds of timing slack*: the reading may match the afterwards gap anywhere within 2 seconds of it. This is what `pass` uses.
 
 The slack is there for the jumps described above. Live and afterwards both make each jump but can place it a second apart, and for that second they differ by the whole jump. Away from jumps the gap changes slowly and the slack makes almost no difference. The slack and the target are the two options of `compareGapSeries` in `engine/gap.js`.
+
+## The pace ghost
+
+A ghost can also simply hold a pace, on whatever route is being run. There is no recorded route to snap to, so your progress is distance covered, measured from GPS alone, and the ghost's is its speed times the time on your clock. The gap is then as right as that distance: 1% out on distance is 1% out on the gap, which is 36 seconds over an hour.
+
+- **Measuring distance.** Adding up the gaps between GPS fixes over-counts, because every wobble of the signal looks like movement. Movement is only counted once it has gone 5 m from the last counted point, so standing still adds nothing. Sharp corners are cut by a metre or two each.
+- **A past run on a different route** becomes a set pace: that run's average. Its hills and crossings no longer line up with anything, so its average is all that carries over. `paceOf` works it out, and the harness has a button for it.
+- **In the harness,** set "Ghost" to "A set pace, on any route" and type the pace. Only your own recording is needed.
+
+Not built yet: switching to a recorded ghost's own pacing on the stretches where your route overlaps one it ran. See "Pace ghost" in the spec.
 
 ## Deployment
 

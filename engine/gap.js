@@ -25,6 +25,7 @@
 
 import { buildRoute } from './route.js';
 import { toFixes, findPauses } from './gpx.js';
+import { createClock, movingTime } from './clock.js';
 import {
   createProgressTracker,
   projectRecording,
@@ -96,20 +97,6 @@ export function findStops(profile, options) {
 }
 
 /**
- * What a paused watch would show at elapsed time `t`: the seconds of `t`
- * that fall outside the pauses.
- * @param {Array<{start:number, end:number}>} pauses in time order
- */
-export function movingTime(pauses, t) {
-  let paused = 0;
-  for (const pause of pauses) {
-    if (pause.start >= t) break;
-    paused += Math.min(t, pause.end) - pause.start;
-  }
-  return t - paused;
-}
-
-/**
  * Turn a ghost recording into what a race needs: the route it drew, its own
  * progress along that route, and where it stood still.
  *
@@ -164,24 +151,17 @@ export function gapAt(ghost, t, dist) {
 export function createGapTracker(route, ghost, options) {
   const progress = createProgressTracker(route, options);
   const finishLine = route.length - FINISH_TOLERANCE;
+  const clock = createClock();
   let finish = null;
-  let pausedTotal = 0;
-  let pausedSince = null;
   return {
     /** @param {{t:number, lat:number, lon:number, accuracy?:number}} fix */
     update(fix) {
       if (!finish) progress.update(fix);
     },
     /** Stop the runner's clock at elapsed time `t`. */
-    pause(t) {
-      if (pausedSince == null) pausedSince = t;
-    },
+    pause: clock.pause,
     /** Start the runner's clock again at elapsed time `t`. */
-    resume(t) {
-      if (pausedSince == null) return;
-      pausedTotal += Math.max(0, t - pausedSince);
-      pausedSince = null;
-    },
+    resume: clock.resume,
     /**
      * @param {number} t elapsed seconds since the runner's first fix
      * @returns {{t:number, time:number, paused:boolean, dist:number, speed:number, offset:number,
@@ -192,8 +172,7 @@ export function createGapTracker(route, ghost, options) {
       if (finish) return { ...finish, t };
       const p = progress.at(t);
       if (!p) return null;
-      const paused = pausedSince != null;
-      const time = t - pausedTotal - (paused ? Math.max(0, t - pausedSince) : 0);
+      const { time, paused } = clock.read(t);
       const sample = { ...p, time, paused, ...gapAt(ghost, time, p.dist), finished: p.dist >= finishLine };
       if (sample.finished) finish = sample;
       return sample;

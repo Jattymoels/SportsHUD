@@ -43,6 +43,28 @@ Ten behaviours, each with a test and a pass target. The targets are proposals to
 | B9 | Look-to-range: look at a mapped feature, see its distance | Look at ten features on course | Correct feature in 8 of 10 when features are 15° or more apart | Phone, then glasses |
 | B10 | Glanceable and silent | Simulator review of every screen; tilt test for auto-hide at address | Key number read within 2 seconds; display hides within 1 second of looking down | Desk, then glasses |
 
+## Pace ghost
+
+Added 2026-11-11. This is the main differentiator for now, though not the main product.
+
+The ghost does not have to be a recording of the route being run:
+
+| Ghost | Good for | How it runs |
+| --- | --- | --- |
+| A set pace | Consistent running | Holds the pace on whatever route is run |
+| A past run on the same route | Pacing particular parts, such as hills or congestion | Replays the recording, as in B1 |
+| A friend's run or a personal best on the same route | Racing | Replays the recording, as in B1 |
+| A past run carried onto a different route | Its ups and downs no longer line up with anything there | Falls back to a set pace: that run's average |
+
+**Live segments.** Wanted: where the route being run overlaps a stretch that a recorded ghost has run, that stretch switches to the recording's own pacing, and the set pace covers everything else.
+
+Two more behaviours follow. The targets are proposals, like the others.
+
+| ID | Behaviour | How we test it | Proposed pass target | Tested on |
+| --- | --- | --- | --- | --- |
+| B11 | Live gap to a ghost holding a set pace, on any route | Replay a recording against a set pace; compare the live gap with the gap computed afterwards, and the distance measured with the watch's own figure | Within 3 seconds of the computed gap; distance within 1% of the watch's | Desk, then phone |
+| B12 | Live segments: a recorded ghost takes over where routes overlap | Replay a run that shares part of its route with a recorded ghost | Switches within 5 seconds of joining and of leaving the shared stretch; no jump in the gap at either switch | Desk, then phone |
+
 ## Constraints
 
 ### Attacked through prototyping
@@ -126,7 +148,8 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 ## Open questions
 
 - [x] Two GPX recordings of the same running route, for B1. Supplied 2026-11-11; B1 passes on them at the desk.
-- [ ] The pace ghost: a ghost that holds a pace on whatever route is being run. On 2026-11-11 this was named the main differentiator for now, though not the main product. Is the pace a set one (5:00 per km, say), a past run's pace carried onto a different route, or both? It needs distance measured without a known route, and is not built yet.
+- [x] The pace ghost: which pace? Answered 2026-11-11; see "Pace ghost" above. A set pace is built at the desk. Live segments are not.
+- [ ] What distance does the watch or Strava show for the two test runs? Needed to check the distance target in B11.
 - [ ] Grange or West Beach? Check how well each is mapped in OpenStreetMap before choosing.
 - [ ] Approximate carry distance for each club, needed before build 5.
 - [ ] Are the proposed pass targets right, especially B3 and B4?

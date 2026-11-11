@@ -19,6 +19,7 @@
 // Nothing here knows what sport is being done.
 
 import { snapToRoute } from './route.js';
+import { predict, correct, smooth } from './filter.js';
 
 export const PROGRESS_DEFAULTS = {
   gpsSigma: 3, // metres: assumed along-route error of one fix
@@ -53,18 +54,6 @@ function createFilter(route, options) {
     return heading;
   }
 
-  function predict(t) {
-    const dt = Math.max(0, t - s.t);
-    const q = o.accelNoise;
-    return {
-      d: s.d + s.v * dt,
-      v: s.v,
-      p00: s.p00 + 2 * dt * s.p01 + dt * dt * s.p11 + (q * dt ** 3) / 3,
-      p01: s.p01 + dt * s.p11 + (q * dt * dt) / 2,
-      p11: s.p11 + q * dt,
-    };
-  }
-
   /**
    * Take in one fix. Returns the state before and after it. `cut` marks a
    * fix that held or re-set progress rather than refining it; estimates on
@@ -90,7 +79,7 @@ function createFilter(route, options) {
       return { pred: s, filt: s, cut: true };
     }
 
-    const pred = predict(fix.t);
+    const pred = predict(s, fix.t, o.accelNoise);
     const expected = s.offRoute ? s.d : pred.d;
     const predSigma = Math.sqrt(pred.p00);
     const snap = snapToRoute(route, fix.lat, fix.lon, {
@@ -113,19 +102,7 @@ function createFilter(route, options) {
       return { pred: s, filt: s, cut: true };
     }
 
-    const k0 = pred.p00 / (pred.p00 + sigma ** 2);
-    const k1 = pred.p01 / (pred.p00 + sigma ** 2);
-    const innovation = snap.dist - pred.d;
-    s = {
-      t: fix.t,
-      d: pred.d + k0 * innovation,
-      v: pred.v + k1 * innovation,
-      p00: (1 - k0) * pred.p00,
-      p01: (1 - k0) * pred.p01,
-      p11: pred.p11 - k1 * pred.p01,
-      offset: snap.offset,
-      offRoute: false,
-    };
+    s = { ...correct(pred, snap.dist, sigma), offset: snap.offset, offRoute: false };
     return { pred, filt: s, cut: false };
   }
 
@@ -187,39 +164,8 @@ export function projectRecording(route, fixes, options) {
   const n = steps.length;
   if (n === 0) throw new Error('Recording has no usable fixes');
 
-  // Backward (Rauch-Tung-Striebel) pass over the forward filter's states.
-  // It stops at each cut: hindsight does not reach across one.
-  const d = new Float64Array(n);
-  const v = new Float64Array(n);
-  d[n - 1] = steps[n - 1].filt.d;
-  v[n - 1] = steps[n - 1].filt.v;
-  for (let k = n - 2; k >= 0; k--) {
-    const f = steps[k].filt;
-    if (steps[k + 1].cut) {
-      d[k] = f.d;
-      v[k] = f.v;
-      continue;
-    }
-    const p = steps[k + 1].pred;
-    const dt = steps[k + 1].filt.t - f.t;
-    const m00 = f.p00 + f.p01 * dt;
-    const m10 = f.p01 + f.p11 * dt;
-    const det = p.p00 * p.p11 - p.p01 * p.p01;
-    const c00 = (m00 * p.p11 - f.p01 * p.p01) / det;
-    const c01 = (f.p01 * p.p00 - m00 * p.p01) / det;
-    const c10 = (m10 * p.p11 - f.p11 * p.p01) / det;
-    const c11 = (f.p11 * p.p00 - m10 * p.p01) / det;
-    const ed = d[k + 1] - p.d;
-    const ev = v[k + 1] - p.v;
-    d[k] = f.d + c00 * ed + c01 * ev;
-    v[k] = f.v + c10 * ed + c11 * ev;
-  }
-
-  const t = new Float64Array(n);
-  for (let k = 0; k < n; k++) {
-    t[k] = steps[k].filt.t;
-    d[k] = clamp(d[k], 0, route.length);
-  }
+  const { t, d } = smooth(steps);
+  for (let k = 0; k < n; k++) d[k] = clamp(d[k], 0, route.length);
   return { t, dist: d };
 }
 

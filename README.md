@@ -13,6 +13,7 @@ Build 1 of the spec: the track engine and a desk replay harness.
 | --- | --- |
 | `engine/` | The track engine: reads GPX, snaps positions to a route, measures distance along it or without it, and computes the time and distance gap to a ghost. The ghost is either a recording of the same route or a set pace on any route. A plain JavaScript library with no display code and nothing sport-specific. Tests are in `engine/tests/`. |
 | `apps/ghost/` | Ghost run, the first prototype of the race screen: a 600×600 display driven by the arrow keys and Enter, that races a pace or a past run using live GPS. Made to be tried on a phone, standing in for the glasses. |
+| `apps/preview/` | Through the glasses: a recorded run from the runner's eyes, with the ghost and distance markers placed in the world along the route. A preview of where the product is heading, with a switch to the heads-up square that today's display can show. Desk tool. |
 | `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to either kind of ghost. |
 | `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. |
 | `tools/` | A small local web server and a command-line B1 report. |

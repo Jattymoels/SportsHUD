@@ -140,6 +140,7 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 | Field-test phone | Android |
 | Golf test course | Grange, with member access, or West Beach as a public option |
 | Rangefinder for B7 | Available |
+| Direction | The ghost and the route's markers are to be placed in the world in front of the runner, like a time-trial ghost in a racing game showing a personal best, with distance markers coming up along the route. A heads-up panel of numbers is what competitors already show. Today's Ray-Ban Display cannot place things in the world, so this does not have to work on current hardware; `apps/preview/` shows what it would look like. Stated 2026-11-12 |
 | Clock | Everyday runs: paused time does not count, as on a watch. Races: the clock never stops. The engine does both; everyday is the default. Agreed 2026-11-11 |
 | Real recordings | Kept out of the repository, because they show where runs start and end. Re-uploaded when a re-test is needed. Agreed 2026-11-11 |
 | B1 scoring | A live reading passes if it is within 3 seconds of the gap computed afterwards for any moment within 2 seconds of it. The 2 seconds cover the jump in the gap where the ghost stood still. Agreed 2026-11-11; details in the README |

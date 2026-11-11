@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Through the glasses · SportsHUD</title>
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <header>
+    <a class="home" href="../../">SportsHUD</a>
+    <h1>Through the glasses</h1>
+    <p class="lede">A recorded run from the runner's eyes, with what the glasses would add. The world here is a plain stand-in for the street; the bright parts are the glasses.</p>
+  </header>
+
+  <main>
+    <section class="bar" aria-label="What the glasses show">
+      <label>The glasses draw
+        <select id="style">
+          <option value="anchored">A ghost and markers placed in the world (the direction)</option>
+          <option value="square">A heads-up square (what today's display does)</option>
+        </select>
+      </label>
+      <label>The display covers
+        <select id="display">
+          <option value="50,30">A wide part of your view (50° × 30°)</option>
+          <option value="30,20">A middling part (30° × 20°)</option>
+          <option value="14,14">A small square, as on today's Ray-Ban Display (14° × 14°)</option>
+          <option value="">All of your view</option>
+        </select>
+      </label>
+    </section>
+
+    <div id="stage">
+      <canvas id="view" aria-label="First-person view of the run with the glasses' overlay"></canvas>
+    </div>
+    <p id="caption" class="caption"></p>
+
+    <section class="bar transport" aria-label="Playback">
+      <button id="play" type="button">Play</button>
+      <label>Speed
+        <select id="speed"></select>
+      </label>
+      <input id="scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Position in the run">
+      <output id="clock">0:00 / 0:00</output>
+      <button id="ahead" type="button">Look ahead</button>
+    </section>
+    <p class="hint">Drag on the picture, or press Left and Right, to turn your head. Enter or Space plays and pauses.</p>
+
+    <section class="bar" aria-label="Recordings">
+      <label>Run
+        <select id="pair"></select>
+      </label>
+      <label>Ghost GPX
+        <input type="file" id="ghostFile" accept=".gpx,application/gpx+xml,text/xml">
+      </label>
+      <label>Your GPX
+        <input type="file" id="runnerFile" accept=".gpx,application/gpx+xml,text/xml">
+      </label>
+      <label>Ghost
+        <select id="ghostMode">
+          <option value="track">The Ghost GPX, on its route</option>
+          <option value="pace">A set pace</option>
+        </select>
+      </label>
+      <label id="paceBox" hidden>Pace per km
+        <input id="ghostPace" type="text" inputmode="numeric" value="5:00" size="5" autocomplete="off">
+      </label>
+    </section>
+    <p id="message" role="status" hidden></p>
+
+    <section class="notes">
+      <h2>What is real here</h2>
+      <ul>
+        <li>The route, your position, the ghost's position and the gap all come from the recordings, through the same engine as the rest of SportsHUD.</li>
+        <li>The street is not real. It is a flat stand-in: a path, posts every 20 m, a horizon.</li>
+        <li>Placing things in the world needs glasses that know where the road is. Today's Ray-Ban Display does not, and its display covers a small square of your view. Switch both controls at the top to see that.</li>
+        <li>Files you choose stay in your browser.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script type="module" src="preview.js"></script>
+</body>
+</html>

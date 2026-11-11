@@ -20,14 +20,6 @@
       "ghost": "synthetic/walk-a.gpx",
       "runner": "synthetic/walk-b.gpx",
       "synthetic": true
-    },
-    {
-      "id": "walk-sparse",
-      "label": "Walk, a fix every 1 to 6 s (synthetic)",
-      "ghost": "synthetic/walk-a.gpx",
-      "runner": "synthetic/walk-b-sparse.gpx",
-      "synthetic": true,
-      "stress": true
     }
   ]
 }

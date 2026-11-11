@@ -1,26 +1,41 @@
 // The engine against the truth. The synthetic generator knows exactly where
-// each effort was at every instant, so the gap it reports is the real one.
+// each effort was at every instant, so the gap it implies is the real one.
 // Real recordings can never be checked this way.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SCENARIOS, simulate, thin, trueGap, GPS_NOISE, NO_NOISE } from '../../fixtures/generate.mjs';
-import { checkB1, compareGapSeries } from '../index.js';
+import { SCENARIOS, simulate, thin, GPS_NOISE, NO_NOISE } from '../../fixtures/generate.mjs';
+import { checkB1, compareGapSeries, findStops, gapAt, distAtTime } from '../index.js';
 import { recording } from './helpers.js';
 
-function againstTruth(scenario, noise, { seedShift = 0, sparse = false } = {}) {
-  const shifted = {
-    ...scenario,
-    efforts: {
-      a: { ...scenario.efforts.a, seed: scenario.efforts.a.seed + seedShift },
-      b: { ...scenario.efforts.b, seed: scenario.efforts.b.seed + seedShift },
-    },
+/** An effort's true progress, in the shape the engine uses for a ghost. */
+function trueProfile(run) {
+  const profile = {
+    t: Float64Array.from(run.truth, (_, i) => i * run.step),
+    dist: Float64Array.from(run.truth),
   };
+  profile.stops = findStops(profile);
+  return profile;
+}
+
+function againstTruth(scenario, noise, { seedShift = 0, sparse = false } = {}) {
+  const effort = (who) => ({
+    ...scenario.efforts[who],
+    seed: scenario.efforts[who].seed + seedShift,
+    // The sparse case is about fixes that are far apart while moving, so
+    // leave out the holes that auto-pause adds at stops.
+    autoPause: sparse ? false : scenario.efforts[who].autoPause,
+  });
+  const shifted = { ...scenario, efforts: { a: effort('a'), b: effort('b') } };
   const a = simulate(shifted, 'a', noise);
   const b = simulate(shifted, 'b', noise);
   const runner = sparse ? thin(b.fixes, 5 + seedShift) : b.fixes;
-  const { live, stats, route } = checkB1(recording(a.fixes), recording(runner));
-  const truth = live.slice(0, stats.samples).map((s) => ({ t: s.t, ...trueGap(a, b, s.t), finished: false }));
+  const { live, stats, route } = checkB1(recording(a.fixes), recording(runner), { fillGaps: !sparse });
+  const ghost = trueProfile(a);
+  const self = trueProfile(b);
+  const truth = live
+    .slice(0, stats.samples)
+    .map((s) => ({ t: s.t, ...gapAt(ghost, s.t, distAtTime(self, s.t)), finished: false }));
   return { live, truth, route, b1: stats };
 }
 
@@ -29,8 +44,10 @@ const percentile = (values, p) => [...values].sort((x, y) => x - y)[Math.min(val
 for (const scenario of SCENARIOS) {
   test(`${scenario.id}: with perfect GPS the live gap is the true gap`, () => {
     const { live, truth, route } = againstTruth(scenario, NO_NOISE);
-    // Within 2 s throughout (same 2 s timing slack as B1, for the ghost's stops).
-    const stats = compareGapSeries(live, truth, { targetS: 2 });
+    // Within 2 s throughout. The slack is wider than B1's because the gap
+    // jumps at the edge of each ghost stop, and the engine's idea of where
+    // that edge is can be a few metres from the true one.
+    const stats = compareGapSeries(live, truth, { targetS: 2, slackS: 5 });
     assert.equal(stats.pass, true, `misses at t = ${stats.misses}`);
     assert.ok(stats.p95TimeError < 0.3, `95th percentile error ${stats.p95TimeError.toFixed(2)} s`);
     assert.ok(stats.maxDistError < 6, `distance gap off by up to ${stats.maxDistError.toFixed(1)} m`);

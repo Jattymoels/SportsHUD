@@ -119,8 +119,9 @@ const WRONG_WAY_SIGMAS = 4;
  * @param {number} [opts.nearSigma] how uncertain `near` is, metres
  * @param {number} [opts.gpsSigma] how uncertain the position is, metres
  * @param {[number, number]} [opts.heading] unit vector of travel in the route's x/y frame
- * @returns {{dist:number, offset:number}} metres along the route, and metres
- *   between the position and the route.
+ * @returns {{dist:number, offset:number, dir:[number, number]}} metres along
+ *   the route, metres between the position and the route, and the route's
+ *   direction there as a unit vector in its x/y frame.
  */
 export function snapToRoute(route, lat, lon, opts = {}) {
   const { near = null, window = Infinity, nearSigma = 5, gpsSigma = 3, heading = null, startTolerance = 15 } = opts;
@@ -131,7 +132,7 @@ export function snapToRoute(route, lat, lon, opts = {}) {
 
   const hits = [];
   for (let i = from; i <= to; i++) hits.push(projectOnSegment(route, i, px, py));
-  const result = (hit) => ({ dist: hit.dist, offset: Math.sqrt(hit.offset2) });
+  const result = (hit) => ({ dist: hit.dist, offset: Math.sqrt(hit.offset2), dir: [hit.ux, hit.uy] });
 
   if (near == null) {
     const best = Math.sqrt(hits.reduce((least, h) => Math.min(least, h.offset2), Infinity));

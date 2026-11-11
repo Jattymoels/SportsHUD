@@ -232,7 +232,8 @@ function buildChart() {
   }
   const xStep = [30, 60, 120, 300, 600, 900, 1800, 3600, 7200].find((s) => duration / s <= 8) ?? 14400;
   for (let t = 0; t <= duration; t += xStep) {
-    svgEl('text', { x: x(t), y: H - 8, 'text-anchor': t === 0 ? 'start' : 'middle' }, svg, clock(t));
+    const anchor = t === 0 ? 'start' : x(t) > W - m.right - 24 ? 'end' : 'middle';
+    svgEl('text', { x: x(t), y: H - 8, 'text-anchor': anchor }, svg, clock(t));
   }
 
   const xy = (s, shift = 0) => `${x(s.t).toFixed(1)},${y(s.timeGap + shift).toFixed(1)}`;
@@ -323,7 +324,7 @@ function drawReadout(reading) {
   $('dist').textContent = `${(reading.dist / 1000).toFixed(2)} of ${(route.length / 1000).toFixed(2)} km`;
   $('speedNow').textContent = `${(Math.max(0, reading.speed) * 3.6).toFixed(1)} km/h`;
   $('pace').textContent = reading.speed > 0.3 ? `${clock(1000 / reading.speed)} /km` : '–';
-  $('offset').textContent = `${reading.offset.toFixed(1)} m`;
+  $('offset').textContent = `${reading.offset.toFixed(1)} m${reading.offRoute ? ' (off route)' : ''}`;
   $('fixAge').textContent = `${reading.fixAge.toFixed(0)} s`;
 }
 
@@ -350,6 +351,9 @@ function renderB1() {
     ['Largest difference in the distance gap', `${stats.maxDistError.toFixed(1)} m`],
     ['How often a reading is produced', `every ${stats.tickS} s`],
     ['Oldest GPS fix a reading had to work from', `${stats.maxFixAge.toFixed(0)} s`],
+    ['Places the ghost stood still', stats.ghostStops.count ? `${stats.ghostStops.count}, longest ${stats.ghostStops.longestS.toFixed(0)} s` : 'none'],
+    ['Holes in your recording (watch paused), filled in for the replay', stats.holes.count ? `${stats.holes.count}, longest ${stats.holes.longestS.toFixed(0)} s` : 'none'],
+    ["Time you were off the ghost's route, with progress held", `${stats.offRouteS} s`],
     ['Route length, from the ghost recording', `${(route.length / 1000).toFixed(2)} km`],
   ];
   const table = $('b1');

@@ -13,10 +13,12 @@ export {
   timeAtDist,
 } from './progress.js';
 export {
+  STOP_DEFAULTS,
+  findStops,
   prepareGhost,
   gapAt,
   createGapTracker,
   gapSeriesAfterwards,
   compareGapSeries,
 } from './gap.js';
-export { createReplay, checkB1 } from './replay.js';
+export { fillGaps, createReplay, checkB1 } from './replay.js';

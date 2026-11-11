@@ -2,9 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   prepareGhost,
+  findStops,
   gapAt,
   createGapTracker,
   compareGapSeries,
+  fillGaps,
   createReplay,
   checkB1,
   toFixes,
@@ -36,6 +38,103 @@ test('passing a spot where the ghost stood still jumps the time gap by the lengt
   // The distance gap does not jump.
   near(gapAt(ghost, 105, 299.7).distGap, -0.3, 1e-6);
   near(gapAt(ghost, 105, 300.3).distGap, 0.3, 1e-6);
+});
+
+/** A profile from [time, distance] pairs, one sample a second between them. */
+function profileOf(points) {
+  const t = [];
+  const dist = [];
+  for (let i = 1; i < points.length; i++) {
+    const [t0, d0] = points[i - 1];
+    const [t1, d1] = points[i];
+    for (let s = t0; s < t1; s++) {
+      t.push(s);
+      dist.push(d0 + ((s - t0) / (t1 - t0)) * (d1 - d0));
+    }
+  }
+  t.push(points.at(-1)[0]);
+  dist.push(points.at(-1)[1]);
+  return { t: Float64Array.from(t), dist: Float64Array.from(dist) };
+}
+
+test('findStops finds where a profile stood still', () => {
+  // 3 m/s, a 40 s wait at 300 m, on to 600 m, a 5 s hesitation, on to 900 m.
+  const profile = profileOf([[0, 0], [100, 300], [140, 300], [240, 600], [245, 600], [345, 900]]);
+  assert.deepEqual(findStops(profile), [{ lo: 285, hi: 315, arrive: 100, depart: 140 }]);
+});
+
+test('findStops counts a hole in the recording as a stop, but not sparse fixes', () => {
+  // Fixes every second, then nothing for 60 s while 6 m is covered: a pause.
+  const paused = { t: Float64Array.from([0, 1, 2, 3, 63, 64, 65, 66]), dist: Float64Array.from([0, 3, 6, 9, 15, 18, 21, 24]) };
+  assert.deepEqual(findStops(paused), [{ lo: -6, hi: 30, arrive: 3, depart: 63 }]);
+  // A fix every 6 s at a steady 3 m/s is just a sparse recording.
+  const sparse = { t: Float64Array.from([0, 6, 12, 18, 24]), dist: Float64Array.from([0, 18, 36, 54, 72]) };
+  assert.deepEqual(findStops(sparse), []);
+});
+
+test('findStops does not mistake a steady slow walker for someone standing', () => {
+  assert.deepEqual(findStops(profileOf([[0, 0], [1000, 400]])), []); // 0.4 m/s throughout
+});
+
+test('findStops merges stops that are close together', () => {
+  const profile = profileOf([[0, 0], [100, 300], [130, 300], [136, 318], [166, 318], [266, 618]]);
+  assert.deepEqual(findStops(profile), [{ lo: 285, hi: 333, arrive: 100, depart: 166 }]);
+});
+
+test('around a ghost stop the time gap is measured against the whole stay', () => {
+  const ghost = profileOf([[0, 0], [100, 300], [140, 300], [240, 600]]);
+  ghost.stops = findStops(ghost);
+  // Waiting at the same crossing, a few metres either side of where the ghost stood:
+  for (const dist of [292, 300, 311]) {
+    assert.equal(gapAt(ghost, 90, dist).timeGap > 0, true, 'ahead until the ghost arrives');
+    assert.equal(gapAt(ghost, 100, dist).timeGap, 0);
+    assert.equal(gapAt(ghost, 120, dist).timeGap, 0, 'level while both are there');
+    assert.equal(gapAt(ghost, 140, dist).timeGap, 0);
+    assert.equal(gapAt(ghost, 150, dist).timeGap < 0, true, 'behind once the ghost has left');
+  }
+  // The ghost left its waiting spot at 140 s, and passed 11 m beyond it 3.7 s later.
+  near(gapAt(ghost, 150, 292).timeGap, -10, 1e-9);
+  near(gapAt(ghost, 150, 311).timeGap, -6.33, 0.01);
+  // Arriving before the ghost, the gap counts down to its arrival wherever in the zone you stand.
+  near(gapAt(ghost, 80, 296).timeGap, 18.7, 0.05);
+  near(gapAt(ghost, 80, 310).timeGap, 20, 1e-9);
+  // Outside the zone it is the ordinary gap again.
+  near(gapAt(ghost, 80, 270).timeGap, 10, 1e-9);
+  near(gapAt(ghost, 150, 330).timeGap, 0, 1e-9);
+  near(gapAt(ghost, 130, 330).timeGap, 20, 1e-9);
+});
+
+test('fillGaps fills holes in a recording with one fix a second', () => {
+  const fixes = [
+    { t: 0, lat: 10, lon: 20 },
+    { t: 1, lat: 10.001, lon: 20 },
+    { t: 5, lat: 10.005, lon: 20.004 },
+    { t: 6.5, lat: 10.006, lon: 20.004 },
+  ];
+  const filled = fillGaps(fixes);
+  assert.deepEqual(filled.map((f) => f.t), [0, 1, 2, 3, 4, 5, 5.75, 6.5]);
+  near(filled[3].lat, 10.003, 1e-9);
+  near(filled[3].lon, 20.002, 1e-9);
+  assert.equal(filled[1], fixes[1]);
+  assert.deepEqual(fillGaps(fixes.slice(0, 2)), fixes.slice(0, 2));
+});
+
+test('both waiting at the same crossing, with auto-pause holes in both recordings', () => {
+  // Ghost runs 300 m, stands 60 s, runs on. Runner arrives 10 s later, stands 20 s, runs on.
+  // Neither watch saved anything while standing.
+  const hole = (fixes, from, seconds) => [...fixes.slice(0, from + 1), ...fixes.slice(from + 1).map((f) => ({ ...f, t: f.t + seconds }))];
+  const ghostFixes = hole(steady(loop, 3), 100, 60);
+  const runnerFixes = hole(steady(loop, 3).map((f) => ({ ...f, t: f.t + 10 })), 100, 20);
+  runnerFixes.unshift({ ...runnerFixes[0], t: 0 });
+  const { live, stats, ghost } = checkB1(recording(ghostFixes), recording(runnerFixes));
+  assert.equal(ghost.stops.length, 1);
+  assert.equal(stats.pass, true, `misses at t = ${stats.misses}`);
+  assert.equal(stats.maxFixAge, 0);
+  const at = (t) => live[t].timeGap;
+  near(at(100), -10, 1, 'behind on the way in');
+  near(at(120), 0, 0.5, 'level while both stand at the crossing');
+  near(at(128), 0, 0.5);
+  near(at(150), 30, 1.5, 'ahead after leaving 30 s before the ghost did');
 });
 
 test('a recording raced against itself has no gap', () => {

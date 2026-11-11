@@ -72,12 +72,18 @@ test('toFixes refuses a recording without timestamps', () => {
   assert.throws(() => toFixes({ points: [{ lat: 1, lon: 1, time: null }, { lat: 2, lon: 2, time: null }] }), /no timestamps/);
 });
 
-test('reads a fixture file from fixtures/', () => {
-  const gpx = parseGpx(readFileSync(new URL('../../fixtures/synthetic/run-a.gpx', import.meta.url), 'utf8'));
-  assert.equal(gpx.name, 'Synthetic run A');
-  assert.ok(gpx.points.length > 500);
-  assert.ok(gpx.points.every((p) => p.time != null && p.lat < -34 && p.lon > 138));
-  const fixes = toFixes(gpx);
+test('reads fixture files from fixtures/', () => {
+  const read = (name) => parseGpx(readFileSync(new URL(`../../fixtures/synthetic/${name}`, import.meta.url), 'utf8'));
+  const ride = read('ride-a.gpx');
+  assert.equal(ride.name, 'Synthetic ride A');
+  assert.ok(ride.points.length > 500);
+  assert.ok(ride.points.every((p) => p.time != null && p.lat < -34 && p.lon > 138));
+  const fixes = toFixes(ride);
   assert.equal(fixes[0].t, 0);
   assert.equal(fixes[fixes.length - 1].t, fixes.length - 1); // one fix a second
+
+  // The run was saved with auto-pause, so it has a hole where the runner stood.
+  const run = toFixes(read('run-a.gpx'));
+  const longest = Math.max(...run.slice(1).map((f, i) => f.t - run[i].t));
+  assert.ok(longest > 30, `longest hole ${longest} s`);
 });

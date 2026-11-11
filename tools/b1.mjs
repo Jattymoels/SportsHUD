@@ -22,7 +22,7 @@ const pct = (x) => (100 * x).toFixed(1) + '%';
 const sec = (x) => x.toFixed(2) + ' s';
 for (const pair of pairs) {
   const { stats, route } = checkB1(load(pair.ghost), load(pair.runner));
-  console.log(`\n${pair.label}${pair.stress ? '  [stress case]' : ''}`);
+  console.log(`\n${pair.label}`);
   console.log(`  route ${(route.length / 1000).toFixed(2)} km, ${stats.samples} readings, one every ${stats.tickS} s (oldest fix used: ${stats.maxFixAge} s)`);
   console.log(`  B1 ${stats.pass ? 'PASS' : 'FAIL'}: ${pct(stats.within)} of readings within ${stats.targetS} s of the gap computed afterwards (allowing ${stats.slackS} s of timing slack); worst ${sec(stats.maxTimeErrorWithSlack)}`);
   console.log(`  same instant, no slack: ${pct(stats.withinSameInstant)} within ${stats.targetS} s; worst ${sec(stats.maxTimeError)}, 95th percentile ${sec(stats.p95TimeError)}, mean ${sec(stats.meanTimeError)}`);

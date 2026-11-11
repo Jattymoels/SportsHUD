@@ -118,6 +118,7 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 | Field-test phone | Android |
 | Golf test course | Grange, with member access, or West Beach as a public option |
 | Rangefinder for B7 | Available |
+| B1 scoring | A live reading passes if it is within 3 seconds of the gap computed afterwards for any moment within 2 seconds of it. The 2 seconds cover the jump in the gap where the ghost stood still. Agreed 2026-11-11; details in the README |
 | Code and build | GitHub repository, built in Claude Code sessions |
 
 ## Open questions

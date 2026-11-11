@@ -100,7 +100,12 @@ function positionAt(path, s) {
 //
 // An effort is: a cruising speed (m/s), slow swings around it, places where
 // it stops (metres along the path, seconds stopped), and stretches where it
-// surges. Nothing below is tuned to the engine.
+// surges. `autoPause` saves it the way a watch with auto-pause does: nothing
+// is recorded while standing, so the file has a hole at each stop. Nothing
+// below is tuned to the engine.
+//
+// The run copies what real commute recordings look like: both efforts wait
+// at the same crossing, for different lengths of time, with auto-pause on.
 
 export const SCENARIOS = [
   {
@@ -109,8 +114,8 @@ export const SCENARIOS = [
     gpxType: 'running',
     path: measure(runPath()),
     efforts: {
-      a: { start: '2026-10-03T21:30:00Z', speed: 3.0, swing: 0.06, stops: [{ at: 1010, for: 20 }], seed: 11 },
-      b: { start: '2026-10-10T21:32:00Z', speed: 3.12, swing: 0.08, slowStart: 300, surges: [{ from: 1900, to: 2300, by: 1.12 }], seed: 12 },
+      a: { start: '2026-10-03T21:30:00Z', speed: 3.0, swing: 0.06, stops: [{ at: 1010, for: 45 }], autoPause: true, seed: 11 },
+      b: { start: '2026-10-10T21:32:00Z', speed: 3.12, swing: 0.08, slowStart: 300, stops: [{ at: 1006, for: 20 }], surges: [{ from: 1900, to: 2300, by: 1.12 }], autoPause: true, seed: 12 },
     },
   },
   {
@@ -195,9 +200,17 @@ export function simulate(scenario, who, noise = GPS_NOISE) {
   };
   const driftX = wave();
   const driftY = wave();
+  const truthAt = (t) => truth[Math.max(0, Math.min(truth.length - 1, Math.round(t / STEP)))];
   const fixes = [];
+  let paused = false;
   for (let t = 0; ; t = Math.min(Math.ceil(duration), t + 1)) {
-    const [x, y] = positionAt(path, truth[Math.min(truth.length - 1, Math.round(t / STEP))]);
+    // Auto-pause: stop saving once nearly still, start again once clearly moving.
+    const speed = truthAt(t + 0.5) - truthAt(t - 0.5);
+    if (effort.autoPause && t > 0 && t < duration) {
+      paused = paused ? speed < 1 : speed < 0.3;
+      if (paused) continue;
+    }
+    const [x, y] = positionAt(path, truthAt(t));
     fixes.push({
       t,
       lat: ORIGIN.lat + (y + driftY(t) + noise.jitter * rng.normal()) / M_PER_DEG_LAT,
@@ -218,17 +231,6 @@ export function thin(fixes, seed = 1) {
   for (let i = 0; i < fixes.length - 1; i += 1 + Math.floor(rng.uniform() * 6)) kept.push(fixes[i]);
   kept.push(fixes[fixes.length - 1]);
   return kept;
-}
-
-/** True gap of effort `b` against effort `a` at `t` seconds, in the engine's sign convention. */
-export function trueGap(a, b, t) {
-  const distAt = (run, time) => run.truth[Math.min(run.truth.length - 1, Math.round(time / run.step))];
-  const dist = distAt(b, t);
-  return {
-    dist,
-    distGap: dist - distAt(a, t),
-    timeGap: a.truth.findIndex((s) => s >= dist) * a.step - t,
-  };
 }
 
 export function toGpx(scenario, who, fixes) {
@@ -267,18 +269,6 @@ export function buildFixtures() {
       synthetic: true,
     });
   }
-  // Stress case, kept apart from the three pairs above: the walk again, with
-  // the replayed recording thinned to a fix every 1 to 6 seconds.
-  const walk = SCENARIOS.find((s) => s.id === 'walk');
-  files['synthetic/walk-b-sparse.gpx'] = toGpx(walk, 'b', thin(simulate(walk, 'b').fixes));
-  pairs.push({
-    id: 'walk-sparse',
-    label: 'Walk, a fix every 1 to 6 s (synthetic)',
-    ghost: fixturePath(walk, 'a'),
-    runner: 'synthetic/walk-b-sparse.gpx',
-    synthetic: true,
-    stress: true,
-  });
   files['index.json'] = JSON.stringify({ pairs }, null, 2) + '\n';
   return files;
 }

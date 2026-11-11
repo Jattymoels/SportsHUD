@@ -27,6 +27,7 @@ for (const pair of pairs) {
   console.log(`  B1 ${stats.pass ? 'PASS' : 'FAIL'}: ${pct(stats.within)} of readings within ${stats.targetS} s of the gap computed afterwards (allowing ${stats.slackS} s of timing slack); worst ${sec(stats.maxTimeErrorWithSlack)}`);
   console.log(`  same instant, no slack: ${pct(stats.withinSameInstant)} within ${stats.targetS} s; worst ${sec(stats.maxTimeError)}, 95th percentile ${sec(stats.p95TimeError)}, mean ${sec(stats.meanTimeError)}`);
   console.log(`  distance gap: worst difference ${stats.maxDistError.toFixed(1)} m`);
+  console.log(`  ghost stood still at ${stats.ghostStops.count} place(s), longest ${stats.ghostStops.longestS.toFixed(0)} s; replayed recording had ${stats.holes.count} hole(s), longest ${stats.holes.longestS.toFixed(0)} s${stats.holes.filled ? ', filled' : ''}; off the ghost's route for ${stats.offRouteS} s`);
   if (stats.sameInstantMisses.length) console.log(`  over ${stats.targetS} s at the same instant: t = ${stats.sameInstantMisses.join(', ')} s`);
   if (stats.misses.length) console.log(`  over ${stats.targetS} s even with slack: t = ${stats.misses.join(', ')} s`);
 }

@@ -9,6 +9,13 @@
 //                  current spot - the runner's elapsed time. Seconds.
 //
 // Both clocks start at each recording's first fix.
+//
+// Where the ghost stood still (a traffic light, say) it was at one spot for
+// a while, not an instant. Around each such stop the time gap is measured
+// against that whole stay: ahead until the ghost arrived there, behind once
+// it had left, and level in between. Without this the reading would flip by
+// the length of the stop with every metre of GPS wobble while the runner
+// waits at the same light.
 
 import { buildRoute } from './route.js';
 import { toFixes } from './gpx.js';
@@ -26,25 +33,92 @@ import {
  */
 const FINISH_TOLERANCE = 10;
 
+export const STOP_DEFAULTS = {
+  stopSpeed: 0.5, // m/s: slower than this (or a quarter of the usual speed, if that is less) is standing
+  stopSeconds: 8, // a stop lasts at least this long
+  holeSeconds: 5, // a hole this long in the recording is a pause, if it was not crossed at near-normal speed
+  stopZone: 15, // metres either side of a stop that are treated as the same spot
+};
+
 /**
- * Turn a ghost recording into what a race needs: the route it drew and its
- * own progress along that route.
+ * Find where a profile stood still.
+ *
+ * Standing is moving slower than `stopSpeed`, or a quarter of the profile's
+ * usual speed if that is less, so a slow walker is not mistaken for someone
+ * standing. A hole in the recording counts too, unless it was crossed at
+ * more than half the usual speed: the watch was paused, but the clock ran on.
+ *
+ * @param {{t:Float64Array, dist:Float64Array}} profile monotone
+ * @returns {Array<{lo:number, hi:number, arrive:number, depart:number}>}
+ *   zones of the route (metres) with the time the profile arrived and left.
+ */
+export function findStops(profile, options) {
+  const o = { ...STOP_DEFAULTS, ...options };
+  const { t, dist } = profile;
+  const n = t.length;
+  const speed = (k) => (dist[k + 1] - dist[k]) / (t[k + 1] - t[k]);
+  const speeds = [];
+  for (let k = 0; k < n - 1; k++) speeds.push(speed(k));
+  speeds.sort((a, b) => a - b);
+  const usual = speeds[speeds.length >> 1] || 0;
+  const crawl = Math.min(o.stopSpeed, usual / 4);
+  const standing = (k) => speed(k) < crawl || (t[k + 1] - t[k] >= o.holeSeconds && speed(k) < usual / 2);
+
+  // Runs of standing, as [first sample, last sample]. A blip of movement
+  // shorter than 2 s does not end a run.
+  const runs = [];
+  for (let k = 0; k < n - 1; k++) {
+    if (!standing(k)) continue;
+    const last = runs[runs.length - 1];
+    if (last && t[k] - t[last[1]] <= 2) last[1] = k + 1;
+    else runs.push([k, k + 1]);
+  }
+
+  const stops = [];
+  for (const [a, b] of runs) {
+    if (t[b] - t[a] < o.stopSeconds) continue;
+    const zone = { lo: dist[a] - o.stopZone, hi: dist[b] + o.stopZone, arrive: t[a], depart: t[b] };
+    const last = stops[stops.length - 1];
+    if (last && zone.lo <= last.hi) {
+      last.hi = zone.hi;
+      last.depart = zone.depart;
+    } else {
+      stops.push(zone);
+    }
+  }
+  return stops;
+}
+
+/**
+ * Turn a ghost recording into what a race needs: the route it drew, its own
+ * progress along that route, and where it stood still.
  *
  * @param recording from parseGpx
- * @returns {{route: object, ghost: {t:Float64Array, dist:Float64Array}}}
+ * @returns {{route: object, ghost: {t:Float64Array, dist:Float64Array, stops:Array}}}
  */
 export function prepareGhost(recording, options) {
   const fixes = toFixes(recording);
   const route = buildRoute(fixes, options);
   const ghost = monotone(projectRecording(route, fixes, options));
+  ghost.stops = findStops(ghost, options);
   return { route, ghost };
 }
 
-/** Gap for a runner who is `dist` metres along the route at elapsed time `t`. */
+/**
+ * Gap for a runner who is `dist` metres along the route at elapsed time `t`.
+ * @param ghost a monotone profile, with `stops` from findStops if it has any
+ */
 export function gapAt(ghost, t, dist) {
   const ghostDist = distAtTime(ghost, t);
+  let arrive = timeAtDist(ghost, dist);
+  let depart = arrive;
+  const stop = ghost.stops?.find((s) => dist >= s.lo && dist <= s.hi);
+  if (stop) {
+    arrive = Math.min(arrive, stop.arrive);
+    depart = Math.max(depart, stop.depart);
+  }
   return {
-    timeGap: timeAtDist(ghost, dist) - t,
+    timeGap: t < arrive ? arrive - t : t > depart ? depart - t : 0,
     distGap: dist - ghostDist,
     ghostDist,
   };

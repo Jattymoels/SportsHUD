@@ -101,6 +101,27 @@ export function toFixes(recording) {
 }
 
 /**
+ * Write fixes out as GPX text, so a run recorded here can be opened anywhere
+ * else, or read back in with parseGpx.
+ *
+ * @param {Array<{t:number, lat:number, lon:number}>} fixes `t` in seconds since `startedAt`
+ * @param {{name?: string, startedAt?: number}} [details] startedAt in milliseconds since the Unix epoch
+ */
+export function toGpx(fixes, { name = 'SportsHUD run', startedAt = 0 } = {}) {
+  const escape = (text) => text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+  const stamp = (t) => new Date(startedAt + t * 1000).toISOString();
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<gpx version="1.1" creator="SportsHUD" xmlns="http://www.topografix.com/GPX/1/1">',
+    ` <trk><name>${escape(name)}</name><trkseg>`,
+    ...fixes.map((f) => `  <trkpt lat="${f.lat.toFixed(7)}" lon="${f.lon.toFixed(7)}"><time>${stamp(f.t)}</time></trkpt>`),
+    ' </trkseg></trk>',
+    '</gpx>',
+    '',
+  ].join('\n');
+}
+
+/**
  * Find where a recording was paused.
  *
  * A paused watch saves nothing, so a pause shows up as a hole between two

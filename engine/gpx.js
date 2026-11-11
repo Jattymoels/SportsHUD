@@ -1,6 +1,8 @@
 // GPX reader. No DOM needed, so the same code runs in a browser, on the
 // glasses and in Node tests.
 
+import { haversine } from './geo.js';
+
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 
 function decodeText(s) {
@@ -96,4 +98,29 @@ export function toFixes(recording) {
     fixes.push({ t: (p.time - t0) / 1000, lat: p.lat, lon: p.lon });
   }
   return fixes;
+}
+
+/**
+ * Find where a recording was paused.
+ *
+ * A paused watch saves nothing, so a pause shows up as a hole between two
+ * fixes. A hole of `holeSeconds` or more counts as a pause unless it was
+ * crossed at more than half the recording's usual speed, which is just a
+ * watch saving fixes far apart.
+ *
+ * @param {Array<{t:number, lat:number, lon:number}>} fixes from toFixes
+ * @returns {Array<{start:number, end:number}>} seconds on the recording's clock
+ */
+export function findPauses(fixes, { holeSeconds = 5 } = {}) {
+  const steps = [];
+  for (let i = 1; i < fixes.length; i++) {
+    const a = fixes[i - 1];
+    const b = fixes[i];
+    steps.push({ start: a.t, end: b.t, speed: haversine(a.lat, a.lon, b.lat, b.lon) / (b.t - a.t) });
+  }
+  const speeds = steps.map((s) => s.speed).sort((x, y) => x - y);
+  const usual = speeds[speeds.length >> 1] ?? 0;
+  return steps
+    .filter((s) => s.end - s.start >= holeSeconds && s.speed < usual / 2)
+    .map(({ start, end }) => ({ start, end }));
 }

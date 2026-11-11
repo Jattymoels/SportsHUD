@@ -5,7 +5,7 @@
 // default), exactly as a display would read it. Tests run a replay instantly;
 // the desk harness runs the same replay against the wall clock.
 
-import { toFixes } from './gpx.js';
+import { toFixes, findPauses } from './gpx.js';
 import {
   prepareGhost,
   createGapTracker,
@@ -44,21 +44,34 @@ export function fillGaps(fixes, step = 1) {
  * @param route from prepareGhost
  * @param ghost from prepareGhost
  * @param {Array<{t:number, lat:number, lon:number}>} runnerFixes from toFixes
- * @param {{tickS?: number}} [options] also passed on to the tracker
+ * @param {{tickS?: number, pauses?: Array<{start:number, end:number}>}} [options]
+ *   `pauses`: when the runner's watch was paused. The replay pauses and
+ *   resumes the tracker's clock at those moments, as the watch's button or
+ *   its auto-pause did. Other options are passed on to the tracker.
  */
 export function createReplay(route, ghost, runnerFixes, options = {}) {
   const tickS = options.tickS ?? 1;
   const duration = runnerFixes[runnerFixes.length - 1].t;
-  let tracker, nextFix, nextTick;
+  const clockEvents = (options.pauses ?? []).flatMap((p) => [
+    { t: p.start, paused: true },
+    { t: p.end, paused: false },
+  ]);
+  let tracker, nextFix, nextTick, nextEvent;
 
   function reset() {
     tracker = createGapTracker(route, ghost, options);
     nextFix = 0;
     nextTick = 0;
+    nextEvent = 0;
   }
   function feedUntil(t) {
     while (nextFix < runnerFixes.length && runnerFixes[nextFix].t <= t) {
       tracker.update(runnerFixes[nextFix++]);
+    }
+    while (nextEvent < clockEvents.length && clockEvents[nextEvent].t <= t) {
+      const event = clockEvents[nextEvent++];
+      if (event.paused) tracker.pause(event.t);
+      else tracker.resume(event.t);
     }
   }
   reset();
@@ -93,22 +106,29 @@ export function createReplay(route, ghost, runnerFixes, options = {}) {
  *
  * @param ghostRecording from parseGpx
  * @param runnerRecording from parseGpx
- * @param {{fillGaps?: boolean}} [options] `fillGaps: false` replays the
+ * @param {{clock?: 'moving'|'elapsed', fillGaps?: boolean}} [options]
+ *   `clock`: 'moving' (default) leaves out the time either recording was
+ *   paused; 'elapsed' never stops the clocks. `fillGaps: false` replays the
  *   runner's recording exactly as saved, holes and all. Other options are
  *   passed on to the engine.
  */
 export function checkB1(ghostRecording, runnerRecording, options = {}) {
-  const { route, ghost } = prepareGhost(ghostRecording, options);
+  const clock = options.clock ?? 'moving';
+  const { route, ghost, pauses: ghostPauses } = prepareGhost(ghostRecording, options);
   const saved = toFixes(runnerRecording);
+  const pauses = clock === 'elapsed' ? [] : findPauses(saved, options);
   const runnerFixes = options.fillGaps === false ? saved : fillGaps(saved);
-  const replay = createReplay(route, ghost, runnerFixes, options);
+  const replay = createReplay(route, ghost, runnerFixes, { ...options, pauses });
   const live = replay.advanceTo(replay.duration);
-  const afterwards = gapSeriesAfterwards(route, ghost, runnerFixes, live.map((s) => s.t), options);
+  const afterwards = gapSeriesAfterwards(route, ghost, runnerFixes, live.map((s) => s.t), { ...options, pauses });
   const stats = compareGapSeries(live, afterwards, options);
   const scored = live.slice(0, stats.samples);
+  const total = (list) => list.reduce((sum, p) => sum + p.end - p.start, 0);
   stats.tickS = replay.tickS;
   stats.maxFixAge = scored.reduce((oldest, s) => Math.max(oldest, s.fixAge), 0);
   // What the recordings were like, for reading the result.
+  stats.clock = clock;
+  stats.pausedS = { runner: total(pauses), ghost: total(ghostPauses) };
   stats.offRouteS = scored.filter((s) => s.offRoute).length * replay.tickS;
   stats.holes = { count: 0, longestS: 0, filled: options.fillGaps !== false };
   for (let i = 1; i < saved.length; i++) {
@@ -118,5 +138,5 @@ export function checkB1(ghostRecording, runnerRecording, options = {}) {
     stats.holes.longestS = Math.max(stats.holes.longestS, hole);
   }
   stats.ghostStops = { count: ghost.stops.length, longestS: ghost.stops.reduce((longest, s) => Math.max(longest, s.depart - s.arrive), 0) };
-  return { route, ghost, runnerFixes, live, afterwards, stats };
+  return { route, ghost, runnerFixes, pauses, live, afterwards, stats };
 }

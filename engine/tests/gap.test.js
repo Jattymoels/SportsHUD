@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   prepareGhost,
   findStops,
+  findPauses,
+  movingTime,
   gapAt,
   createGapTracker,
   compareGapSeries,
@@ -119,15 +121,80 @@ test('fillGaps fills holes in a recording with one fix a second', () => {
   assert.deepEqual(fillGaps(fixes.slice(0, 2)), fixes.slice(0, 2));
 });
 
-test('both waiting at the same crossing, with auto-pause holes in both recordings', () => {
-  // Ghost runs 300 m, stands 60 s, runs on. Runner arrives 10 s later, stands 20 s, runs on.
-  // Neither watch saved anything while standing.
+// Ghost runs 300 m, stands 60 s, runs on. Runner sets off 10 s later, stands
+// 20 s at the same crossing, runs on. Neither watch saved anything while standing.
+function crossingPair() {
   const hole = (fixes, from, seconds) => [...fixes.slice(0, from + 1), ...fixes.slice(from + 1).map((f) => ({ ...f, t: f.t + seconds }))];
   const ghostFixes = hole(steady(loop, 3), 100, 60);
   const runnerFixes = hole(steady(loop, 3).map((f) => ({ ...f, t: f.t + 10 })), 100, 20);
   runnerFixes.unshift({ ...runnerFixes[0], t: 0 });
-  const { live, stats, ghost } = checkB1(recording(ghostFixes), recording(runnerFixes));
-  assert.equal(ghost.stops.length, 1);
+  return [recording(ghostFixes), recording(runnerFixes)];
+}
+
+test('findPauses finds the holes a paused watch leaves, but not sparse fixes', () => {
+  const [ghost, runner] = crossingPair();
+  assert.deepEqual(findPauses(toFixes(ghost)), [{ start: 100, end: 161 }]);
+  // The runner also stood for the first 10 s before setting off.
+  assert.deepEqual(findPauses(toFixes(runner)), [{ start: 0, end: 10 }, { start: 110, end: 131 }]);
+  const sparse = steady(loop, 3).filter((f) => f.t % 6 === 0);
+  assert.deepEqual(findPauses(sparse), []);
+});
+
+test('movingTime leaves paused time out', () => {
+  const pauses = [{ start: 100, end: 160 }, { start: 300, end: 310 }];
+  assert.equal(movingTime(pauses, 50), 50);
+  assert.equal(movingTime(pauses, 100), 100);
+  assert.equal(movingTime(pauses, 130), 100);
+  assert.equal(movingTime(pauses, 200), 140);
+  assert.equal(movingTime(pauses, 305), 240);
+  assert.equal(movingTime(pauses, 400), 330);
+  assert.equal(movingTime([], 400), 400);
+});
+
+test('pausing stops the runner\'s clock but not the tracking', () => {
+  const { route, ghost } = prepareGhost(recording(steady(loop, 3)));
+  const tracker = createGapTracker(route, ghost);
+  const fixes = steady(loop, 3);
+  for (const fix of fixes.slice(0, 101)) tracker.update(fix);
+  near(tracker.at(100).timeGap, 0, 0.3);
+  tracker.pause(100);
+  tracker.pause(105); // already paused: no effect
+  // Standing for 40 s: the same position reported each second.
+  for (let t = 101; t <= 140; t++) tracker.update({ ...fixes[100], t });
+  const waiting = tracker.at(140);
+  assert.equal(waiting.paused, true);
+  assert.equal(waiting.time, 100);
+  near(waiting.timeGap, 0, 0.5, 'gap holds while paused');
+  tracker.resume(140);
+  tracker.resume(150); // not paused: no effect
+  for (const fix of fixes.slice(101, 161)) tracker.update({ ...fix, t: fix.t + 40 });
+  const later = tracker.at(200);
+  assert.equal(later.paused, false);
+  assert.equal(later.time, 160);
+  near(later.dist, 480, 1.5);
+  near(later.timeGap, 0, 0.5, 'and is unchanged afterwards');
+});
+
+test('waiting at the same crossing: on the moving clock the waits do not count', () => {
+  const [ghost, runner] = crossingPair();
+  const result = checkB1(ghost, runner);
+  const { live, stats } = result;
+  assert.equal(stats.clock, 'moving');
+  assert.deepEqual(stats.pausedS, { runner: 31, ghost: 61 });
+  assert.equal(result.ghost.stops.length, 0, 'the ghost\'s wait is gone from its clock');
+  assert.equal(stats.pass, true, `misses at t = ${stats.misses}`);
+  // Same pace, same route: level all the way, whoever waited longer.
+  for (const t of [20, 100, 115, 128, 150, 300]) near(live[t].timeGap, 0, 1, `t=${t}`);
+  assert.equal(live[120].paused, true);
+  assert.equal(live[120].time, 100);
+});
+
+test('waiting at the same crossing: on the elapsed clock the waits count', () => {
+  const [ghost, runner] = crossingPair();
+  const { live, stats, ghost: prepared } = checkB1(ghost, runner, { clock: 'elapsed' });
+  assert.equal(stats.clock, 'elapsed');
+  assert.deepEqual(stats.pausedS, { runner: 0, ghost: 0 });
+  assert.equal(prepared.stops.length, 1);
   assert.equal(stats.pass, true, `misses at t = ${stats.misses}`);
   assert.equal(stats.maxFixAge, 0);
   const at = (t) => live[t].timeGap;

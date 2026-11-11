@@ -8,7 +8,13 @@
 //   time gap     = the elapsed time at which the ghost reached the runner's
 //                  current spot - the runner's elapsed time. Seconds.
 //
-// Both clocks start at each recording's first fix.
+// Both clocks start at each recording's first fix. There are two ways to
+// run them, chosen with the `clock` option:
+//
+//   'moving'  (default) - paused time does not count, as on a watch: where a
+//             recording was paused its clock stops, and the runner's clock
+//             stops whenever pause() has been called. For everyday runs.
+//   'elapsed' - the clocks never stop. For races.
 //
 // Where the ghost stood still (a traffic light, say) it was at one spot for
 // a while, not an instant. Around each such stop the time gap is measured
@@ -18,7 +24,7 @@
 // waits at the same light.
 
 import { buildRoute } from './route.js';
-import { toFixes } from './gpx.js';
+import { toFixes, findPauses } from './gpx.js';
 import {
   createProgressTracker,
   projectRecording,
@@ -90,18 +96,38 @@ export function findStops(profile, options) {
 }
 
 /**
+ * What a paused watch would show at elapsed time `t`: the seconds of `t`
+ * that fall outside the pauses.
+ * @param {Array<{start:number, end:number}>} pauses in time order
+ */
+export function movingTime(pauses, t) {
+  let paused = 0;
+  for (const pause of pauses) {
+    if (pause.start >= t) break;
+    paused += Math.min(t, pause.end) - pause.start;
+  }
+  return t - paused;
+}
+
+/**
  * Turn a ghost recording into what a race needs: the route it drew, its own
  * progress along that route, and where it stood still.
  *
  * @param recording from parseGpx
- * @returns {{route: object, ghost: {t:Float64Array, dist:Float64Array, stops:Array}}}
+ * @param {{clock?: 'moving'|'elapsed'}} [options] other options go to the engine
+ * @returns {{route: object, ghost: {t:Float64Array, dist:Float64Array, stops:Array}, pauses:Array}}
+ *   `ghost.t` is on the chosen clock. `pauses` are the pauses taken out of
+ *   it: none on the elapsed clock.
  */
 export function prepareGhost(recording, options) {
   const fixes = toFixes(recording);
+  const pauses = options?.clock === 'elapsed' ? [] : findPauses(fixes, options);
   const route = buildRoute(fixes, options);
-  const ghost = monotone(projectRecording(route, fixes, options));
+  const profile = projectRecording(route, fixes, options);
+  profile.t = profile.t.map((t) => movingTime(pauses, t));
+  const ghost = monotone(profile);
   ghost.stops = findStops(ghost, options);
-  return { route, ghost };
+  return { route, ghost, pauses };
 }
 
 /**
@@ -128,6 +154,10 @@ export function gapAt(ghost, t, dist) {
  * Live gap. Feed it the runner's fixes as they arrive and read the gap at
  * any moment, including between fixes.
  *
+ * To leave paused time out, call pause() when the runner pauses and resume()
+ * when they carry on, as the button on a watch would. Position keeps being
+ * tracked while paused; only the clock stops.
+ *
  * Once the runner is within a few metres of the end of the route the result
  * is frozen: that is the finishing gap.
  */
@@ -135,20 +165,36 @@ export function createGapTracker(route, ghost, options) {
   const progress = createProgressTracker(route, options);
   const finishLine = route.length - FINISH_TOLERANCE;
   let finish = null;
+  let pausedTotal = 0;
+  let pausedSince = null;
   return {
     /** @param {{t:number, lat:number, lon:number, accuracy?:number}} fix */
     update(fix) {
       if (!finish) progress.update(fix);
     },
+    /** Stop the runner's clock at elapsed time `t`. */
+    pause(t) {
+      if (pausedSince == null) pausedSince = t;
+    },
+    /** Start the runner's clock again at elapsed time `t`. */
+    resume(t) {
+      if (pausedSince == null) return;
+      pausedTotal += Math.max(0, t - pausedSince);
+      pausedSince = null;
+    },
     /**
-     * @returns {{t:number, dist:number, speed:number, offset:number, fixAge:number,
-     *   timeGap:number, distGap:number, ghostDist:number, finished:boolean}|null}
+     * @param {number} t elapsed seconds since the runner's first fix
+     * @returns {{t:number, time:number, paused:boolean, dist:number, speed:number, offset:number,
+     *   fixAge:number, offRoute:boolean, timeGap:number, distGap:number, ghostDist:number, finished:boolean}|null}
+     *   `time` is the runner's clock: `t` less any paused time.
      */
     at(t) {
       if (finish) return { ...finish, t };
       const p = progress.at(t);
       if (!p) return null;
-      const sample = { ...p, ...gapAt(ghost, t, p.dist), finished: p.dist >= finishLine };
+      const paused = pausedSince != null;
+      const time = t - pausedTotal - (paused ? Math.max(0, t - pausedSince) : 0);
+      const sample = { ...p, time, paused, ...gapAt(ghost, time, p.dist), finished: p.dist >= finishLine };
       if (sample.finished) finish = sample;
       return sample;
     },
@@ -158,15 +204,20 @@ export function createGapTracker(route, ghost, options) {
 /**
  * The gap computed afterwards, from the runner's whole recording, at the
  * given elapsed times. Stops at the runner's finish.
+ *
+ * @param {{pauses?: Array<{start:number, end:number}>}} [options] the
+ *   runner's pauses, to leave paused time out; other options go to the engine
  */
 export function gapSeriesAfterwards(route, ghost, runnerFixes, times, options) {
   const profile = projectRecording(route, runnerFixes, options);
+  const pauses = options?.pauses ?? [];
   const finishLine = route.length - FINISH_TOLERANCE;
   const series = [];
   for (const t of times) {
     const dist = distAtTime(profile, t);
+    const time = movingTime(pauses, t);
     const finished = dist >= finishLine;
-    series.push({ t, dist, ...gapAt(ghost, t, dist), finished });
+    series.push({ t, time, dist, ...gapAt(ghost, time, dist), finished });
     if (finished) break;
   }
   return series;

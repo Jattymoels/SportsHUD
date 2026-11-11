@@ -30,7 +30,8 @@ function againstTruth(scenario, noise, { seedShift = 0, sparse = false } = {}) {
   const a = simulate(shifted, 'a', noise);
   const b = simulate(shifted, 'b', noise);
   const runner = sparse ? thin(b.fixes, 5 + seedShift) : b.fixes;
-  const { live, stats, route } = checkB1(recording(a.fixes), recording(runner), { fillGaps: !sparse });
+  // The truth is worked out on clocks that never stop, so compare on those.
+  const { live, stats, route } = checkB1(recording(a.fixes), recording(runner), { clock: 'elapsed', fillGaps: !sparse });
   const ghost = trueProfile(a);
   const self = trueProfile(b);
   const truth = live

@@ -13,7 +13,7 @@ import { buildFixtures } from '../../fixtures/generate.mjs';
 const fixtures = new URL('../../fixtures/', import.meta.url);
 const read = (path) => readFileSync(new URL(path, fixtures), 'utf8');
 const { pairs } = JSON.parse(read('index.json'));
-const b1 = (pair) => checkB1(parseGpx(read(pair.ghost)), parseGpx(read(pair.runner))).stats;
+const b1 = (pair, clock) => checkB1(parseGpx(read(pair.ghost)), parseGpx(read(pair.runner)), { clock }).stats;
 const summary = (s) =>
   `${(100 * s.within).toFixed(1)}% within ${s.targetS} s (${(100 * s.withinSameInstant).toFixed(1)}% at the same instant), worst ${s.maxTimeError.toFixed(2)} s, ${s.samples} readings`;
 
@@ -23,31 +23,42 @@ test('synthetic fixtures are what fixtures/generate.mjs writes', () => {
   }
 });
 
-for (const pair of pairs.filter((p) => p.synthetic)) {
-  test(`B1 ${pair.id}: live gap within 3 s of the gap computed afterwards, updated every second`, (t) => {
-    const stats = b1(pair);
-    t.diagnostic(summary(stats));
-    assert.ok(stats.samples > 300);
-    assert.equal(stats.tickS, 1, 'a reading every second');
-    assert.equal(stats.maxFixAge, 0, 'every reading uses a fix from that second, holes in the recording having been filled');
-    assert.equal(stats.pass, true, `readings outside 3 s at t = ${stats.misses}`);
-    assert.ok(stats.withinSameInstant >= 0.99, `only ${(100 * stats.withinSameInstant).toFixed(2)}% within 3 s at the same instant`);
-    assert.ok(stats.p95TimeError < 1, `95th percentile error ${stats.p95TimeError.toFixed(2)} s`);
+// Both ways of running the clocks: 'moving' leaves paused time out (everyday
+// runs), 'elapsed' never stops (races).
+for (const clock of ['moving', 'elapsed']) {
+  for (const pair of pairs.filter((p) => p.synthetic)) {
+    test(`B1 ${pair.id}, ${clock} clock: live gap within 3 s of the gap computed afterwards, updated every second`, (t) => {
+      const stats = b1(pair, clock);
+      t.diagnostic(summary(stats));
+      assert.ok(stats.samples > 300);
+      assert.equal(stats.tickS, 1, 'a reading every second');
+      assert.equal(stats.maxFixAge, 0, 'every reading uses a fix from that second, holes in the recording having been filled');
+      assert.equal(stats.pass, true, `readings outside 3 s at t = ${stats.misses}`);
+      assert.ok(stats.withinSameInstant >= 0.99, `only ${(100 * stats.withinSameInstant).toFixed(2)}% within 3 s at the same instant`);
+      assert.ok(stats.p95TimeError < 1, `95th percentile error ${stats.p95TimeError.toFixed(2)} s`);
+    });
+  }
+
+  test(`B2, ${clock} clock: a run, a ride and a walk all pass B1 on the same code and settings`, () => {
+    // Nothing passed to checkB1 says what the sport is.
+    for (const id of ['run', 'ride', 'walk']) {
+      const pair = pairs.find((p) => p.id === id);
+      assert.ok(pair, `fixtures/index.json should list a "${id}" pair`);
+      assert.equal(b1(pair, clock).pass, true, `${id} fails B1`);
+    }
   });
 }
 
-test('B2: a run, a ride and a walk all pass B1 on the same code and settings', () => {
-  // checkB1 is called with no options and no hint of the sport.
-  for (const id of ['run', 'ride', 'walk']) {
-    const pair = pairs.find((p) => p.id === id);
-    assert.ok(pair, `fixtures/index.json should list a "${id}" pair`);
-    assert.equal(b1(pair).pass, true, `${id} fails B1`);
-  }
+test('the synthetic run was saved with auto-pause, so the two clocks differ', () => {
+  const run = pairs.find((p) => p.id === 'run');
+  const moving = b1(run, 'moving');
+  assert.ok(moving.pausedS.runner > 10 && moving.pausedS.ghost > 30, JSON.stringify(moving.pausedS));
+  assert.deepEqual(b1(run, 'elapsed').pausedS, { runner: 0, ghost: 0 });
 });
 
 for (const pair of pairs.filter((p) => !p.synthetic)) {
   test(`recorded ${pair.id}: replays (B1 result is printed, not enforced)`, (t) => {
-    const stats = b1(pair);
+    const stats = b1(pair, 'moving');
     t.diagnostic(`${stats.pass ? 'B1 PASS' : 'B1 FAIL'}: ${summary(stats)}`);
     assert.ok(stats.samples > 0);
   });

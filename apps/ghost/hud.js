@@ -4,11 +4,11 @@
 
 export const SIZE = 600;
 
-const INK = '#f4f4ee';
-const DIM = '#8d8d86';
-const AHEAD = '#3ddc97';
-const BEHIND = '#ffb347';
-const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+export const INK = '#f4f4ee';
+export const DIM = '#8d8d86';
+export const AHEAD = '#3ddc97';
+export const BEHIND = '#ffb347';
+export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 function text(ctx, string, x, y, size, { color = INK, align = 'center', weight = 500 } = {}) {
   ctx.font = `${weight} ${size}px ${FONT}`;
@@ -56,8 +56,8 @@ function gapNumber(seconds) {
 
 // ------------------------------------------------------------ the ghost --
 
-/** A ghost outline `height` tall, standing on (x, y). */
-function ghostGlyph(ctx, x, y, height, color) {
+/** A ghost outline `height` tall, standing on (x, y). `glow` (0 to 1) lights its body faintly as well. */
+export function ghostGlyph(ctx, x, y, height, color, glow = 0) {
   const w = height * 0.72;
   const r = w / 2;
   const top = y - height;
@@ -73,6 +73,13 @@ function ghostGlyph(ctx, x, y, height, color) {
   for (let i = 0; i < 3; i++) {
     const right = x + r - (i * w) / 3;
     ctx.quadraticCurveTo(right - w / 6, y - height * 0.16, right - w / 3, y);
+  }
+  if (glow > 0) {
+    const alpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha * glow;
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.globalAlpha = alpha;
   }
   ctx.stroke();
   if (height > 26) {

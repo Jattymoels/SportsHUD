@@ -13,7 +13,7 @@ Build 1 of the spec: the track engine and a desk replay harness.
 | --- | --- |
 | `engine/` | The track engine: reads GPX, snaps positions to a route, measures distance along it, and computes the time and distance gap to a ghost. A plain JavaScript library with no display code and nothing sport-specific. Tests are in `engine/tests/`. |
 | `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap against a second recording. |
-| `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. For now these are synthetic, written by `fixtures/generate.mjs`. |
+| `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. |
 | `tools/` | A small local web server and a command-line B1 report. |
 | `docs/` | The spec and research notes. |
 
@@ -68,7 +68,13 @@ A GPX file shows exactly where you ran, including where a run starts and ends. T
 - **Distance gap:** your distance along the route minus the ghost's, at the same elapsed time.
 - **Time gap:** the elapsed time at which the ghost reached the spot you are at now, minus your elapsed time.
 - **Sign:** positive means you are ahead of the ghost, negative means behind.
-- **Clocks:** each recording's clock starts at its first point.
+- **Clocks:** each recording's clock starts at its first point and keeps running through stops. Time spent standing at a crossing counts.
+
+Three things real recordings made necessary:
+
+- **Where the ghost stood still.** At a traffic light the ghost was at one spot for a while, not an instant. Within 15 m of such a stop the time gap is measured against the whole stay: you are ahead until the ghost arrived there, behind once it had left, and level in between. Otherwise the reading would flip by the length of the stop with every metre of GPS wobble while you wait at the same light. The gap still jumps as you leave the spot, by however much shorter or longer your wait was.
+- **Off the route.** If you are more than 15 m from the ghost's route and not travelling along it (cutting a corner, crossing somewhere else), there is nothing to measure progress against. Progress is held where it was and picked up again where you rejoin. Being far from the route but moving along it, on the other side of a wide road say, still counts as on it.
+- **Holes in a recording.** A watch with auto-pause saves nothing while you stand still, so the file has a hole at each stop. A phone in live use reports about once a second regardless. So a replay fills each hole with positions on the straight line across it.
 
 The **live** gap uses only the positions received so far, and is read once a second. Between GPS fixes your position is carried forward at your current speed. The gap **computed afterwards** uses the complete recording, so each estimate also benefits from the positions that came after it.
 
@@ -77,7 +83,7 @@ The **live** gap uses only the positions received so far, and is read once a sec
 - *At the same instant*: the literal reading of the target.
 - *With 2 seconds of timing slack*: the reading may match the afterwards gap anywhere within 2 seconds of it. This is what `pass` uses.
 
-The slack is there for one case. Where the ghost stood still, at a traffic light say, the time gap jumps by the length of that stop as you pass the spot. Live and afterwards both make the jump but can place it a second apart, and for that second they differ by the whole jump. Away from such jumps the gap changes slowly and the slack makes almost no difference. The slack and the target are the two options of `compareGapSeries` in `engine/gap.js`.
+The slack is there for the jumps described above. Live and afterwards both make each jump but can place it a second apart, and for that second they differ by the whole jump. Away from jumps the gap changes slowly and the slack makes almost no difference. The slack and the target are the two options of `compareGapSeries` in `engine/gap.js`.
 
 ## Deployment
 

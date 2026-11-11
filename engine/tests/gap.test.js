@@ -133,9 +133,10 @@ function crossingPair() {
 
 test('findPauses finds the holes a paused watch leaves, but not sparse fixes', () => {
   const [ghost, runner] = crossingPair();
-  assert.deepEqual(findPauses(toFixes(ghost)), [{ start: 100, end: 161 }]);
+  // The watch saved a fix at 100 s, paused within the next second, and saved again at 161 s.
+  assert.deepEqual(findPauses(toFixes(ghost)), [{ start: 101, end: 161 }]);
   // The runner also stood for the first 10 s before setting off.
-  assert.deepEqual(findPauses(toFixes(runner)), [{ start: 0, end: 10 }, { start: 110, end: 131 }]);
+  assert.deepEqual(findPauses(toFixes(runner)), [{ start: 1, end: 10 }, { start: 111, end: 131 }]);
   const sparse = steady(loop, 3).filter((f) => f.t % 6 === 0);
   assert.deepEqual(findPauses(sparse), []);
 });
@@ -180,13 +181,15 @@ test('waiting at the same crossing: on the moving clock the waits do not count',
   const result = checkB1(ghost, runner);
   const { live, stats } = result;
   assert.equal(stats.clock, 'moving');
-  assert.deepEqual(stats.pausedS, { runner: 31, ghost: 61 });
+  assert.deepEqual(stats.pausedS, { runner: 29, ghost: 60 });
   assert.equal(result.ghost.stops.length, 0, 'the ghost\'s wait is gone from its clock');
   assert.equal(stats.pass, true, `misses at t = ${stats.misses}`);
-  // Same pace, same route: level all the way, whoever waited longer.
-  for (const t of [20, 100, 115, 128, 150, 300]) near(live[t].timeGap, 0, 1, `t=${t}`);
+  // Same pace, same route: the gap does not move, whoever waited longer. It
+  // sits at -1 s because the runner's watch ran for a second before its
+  // first pause, while they were still standing at the start.
+  for (const t of [20, 100, 115, 128, 150, 300]) near(live[t].timeGap, -1, 1, `t=${t}`);
   assert.equal(live[120].paused, true);
-  assert.equal(live[120].time, 100);
+  assert.equal(live[120].time, 102); // 120 s, less 9 s paused at the start and 9 s so far at the crossing
 });
 
 test('waiting at the same crossing: on the elapsed clock the waits count', () => {
@@ -246,7 +249,7 @@ test('a faster effort gets ahead, and the gap freezes once it finishes', () => {
 test('a replay hands over a reading every second, including between sparse fixes', () => {
   const { route, ghost } = prepareGhost(recording(steady(loop, 3)));
   const runner = steady(loop, 3).filter((f) => f.t % 5 === 0); // a fix every 5 s
-  const replay = createReplay(route, ghost, runner);
+  const replay = createReplay(runner, () => createGapTracker(route, ghost));
   const first = replay.advanceTo(62.4);
   assert.deepEqual(first.map((s) => s.t), Array.from({ length: 63 }, (_, i) => i));
   assert.equal(first[62].fixAge, 2);

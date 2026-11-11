@@ -106,7 +106,9 @@ export function toFixes(recording) {
  * A paused watch saves nothing, so a pause shows up as a hole between two
  * fixes. A hole of `holeSeconds` or more counts as a pause unless it was
  * crossed at more than half the recording's usual speed, which is just a
- * watch saving fixes far apart.
+ * watch saving fixes far apart. The pause is taken to start one usual fix
+ * interval after the last fix before the hole, since the watch was still
+ * running when it saved that one.
  *
  * @param {Array<{t:number, lat:number, lon:number}>} fixes from toFixes
  * @returns {Array<{start:number, end:number}>} seconds on the recording's clock
@@ -118,9 +120,10 @@ export function findPauses(fixes, { holeSeconds = 5 } = {}) {
     const b = fixes[i];
     steps.push({ start: a.t, end: b.t, speed: haversine(a.lat, a.lon, b.lat, b.lon) / (b.t - a.t) });
   }
-  const speeds = steps.map((s) => s.speed).sort((x, y) => x - y);
-  const usual = speeds[speeds.length >> 1] ?? 0;
+  const median = (values) => values.sort((x, y) => x - y)[values.length >> 1] ?? 0;
+  const usualSpeed = median(steps.map((s) => s.speed));
+  const usualStep = median(steps.map((s) => s.end - s.start));
   return steps
-    .filter((s) => s.end - s.start >= holeSeconds && s.speed < usual / 2)
-    .map(({ start, end }) => ({ start, end }));
+    .filter((s) => s.end - s.start >= holeSeconds && s.speed < usualSpeed / 2)
+    .map((s) => ({ start: Math.min(s.start + usualStep, s.end), end: s.end }));
 }

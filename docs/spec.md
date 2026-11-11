@@ -126,7 +126,7 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 ## Open questions
 
 - [x] Two GPX recordings of the same running route, for B1. Supplied 2026-11-11; B1 passes on them at the desk.
-- [ ] The pace ghost. On 2026-11-11 the primary use was stated as a ghost that holds a pace on whatever route is being run, ahead of racing a recording of the same route. Is that a set pace (5:00 per km, say), a past run's pace carried onto a different route, or both? It needs distance measured without a known route, and is not built yet.
+- [ ] The pace ghost: a ghost that holds a pace on whatever route is being run. On 2026-11-11 this was named the main differentiator for now, though not the main product. Is the pace a set one (5:00 per km, say), a past run's pace carried onto a different route, or both? It needs distance measured without a known route, and is not built yet.
 - [ ] Grange or West Beach? Check how well each is mapped in OpenStreetMap before choosing.
 - [ ] Approximate carry distance for each club, needed before build 5.
 - [ ] Are the proposed pass targets right, especially B3 and B4?

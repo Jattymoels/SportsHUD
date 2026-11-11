@@ -24,6 +24,12 @@
       <label>Your GPX
         <input type="file" id="runnerFile" accept=".gpx,application/gpx+xml,text/xml">
       </label>
+      <label>Clock
+        <select id="clockMode">
+          <option value="moving">Paused time doesn't count (everyday runs)</option>
+          <option value="elapsed">Clock never stops (races)</option>
+        </select>
+      </label>
     </section>
     <p id="message" role="status" hidden></p>
 
@@ -48,7 +54,7 @@
           <div><dt>Speed</dt><dd id="speedNow">–</dd></div>
           <div><dt>Pace</dt><dd id="pace">–</dd></div>
           <div><dt>GPS fix to route</dt><dd id="offset">–</dd></div>
-          <div><dt>Age of GPS fix</dt><dd id="fixAge">–</dd></div>
+          <div><dt>Your time</dt><dd id="time">–</dd></div>
         </dl>
       </section>
 

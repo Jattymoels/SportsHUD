@@ -2,7 +2,7 @@
 // No display code and no sport-specific code lives under engine/.
 
 export { haversine, createProjection } from './geo.js';
-export { parseGpx, toFixes } from './gpx.js';
+export { parseGpx, toFixes, findPauses } from './gpx.js';
 export { buildRoute, snapToRoute, pointAtDistance } from './route.js';
 export {
   PROGRESS_DEFAULTS,
@@ -15,6 +15,7 @@ export {
 export {
   STOP_DEFAULTS,
   findStops,
+  movingTime,
   prepareGhost,
   gapAt,
   createGapTracker,

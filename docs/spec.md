@@ -118,12 +118,15 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 | Field-test phone | Android |
 | Golf test course | Grange, with member access, or West Beach as a public option |
 | Rangefinder for B7 | Available |
+| Clock | Everyday runs: paused time does not count, as on a watch. Races: the clock never stops. The engine does both; everyday is the default. Agreed 2026-11-11 |
+| Real recordings | Kept out of the repository, because they show where runs start and end. Re-uploaded when a re-test is needed. Agreed 2026-11-11 |
 | B1 scoring | A live reading passes if it is within 3 seconds of the gap computed afterwards for any moment within 2 seconds of it. The 2 seconds cover the jump in the gap where the ghost stood still. Agreed 2026-11-11; details in the README |
 | Code and build | GitHub repository, built in Claude Code sessions |
 
 ## Open questions
 
-- [ ] Two GPX recordings of the same running route, for B1.
+- [x] Two GPX recordings of the same running route, for B1. Supplied 2026-11-11; B1 passes on them at the desk.
+- [ ] The pace ghost. On 2026-11-11 the primary use was stated as a ghost that holds a pace on whatever route is being run, ahead of racing a recording of the same route. Is that a set pace (5:00 per km, say), a past run's pace carried onto a different route, or both? It needs distance measured without a known route, and is not built yet.
 - [ ] Grange or West Beach? Check how well each is mapped in OpenStreetMap before choosing.
 - [ ] Approximate carry distance for each club, needed before build 5.
 - [ ] Are the proposed pass targets right, especially B3 and B4?

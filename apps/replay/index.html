@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Replay harness · SportsHUD</title>
+  <link rel="stylesheet" href="replay.css">
+</head>
+<body>
+  <header class="top">
+    <a class="home" href="../../">SportsHUD</a>
+    <h1>Replay harness</h1>
+    <p class="lede">Plays one recording back as if it were happening now, and shows the live gap to a second recording of the same route: the ghost.</p>
+  </header>
+
+  <main>
+    <section class="bar" aria-label="Recordings">
+      <label>Recordings
+        <select id="pair"></select>
+      </label>
+      <label>Ghost GPX
+        <input type="file" id="ghostFile" accept=".gpx,application/gpx+xml,text/xml">
+      </label>
+      <label>Your GPX
+        <input type="file" id="runnerFile" accept=".gpx,application/gpx+xml,text/xml">
+      </label>
+    </section>
+    <p id="message" role="status" hidden></p>
+
+    <section class="bar transport" aria-label="Playback">
+      <button id="play" type="button">Play</button>
+      <button id="restart" type="button">Restart</button>
+      <label>Speed
+        <select id="speed"></select>
+      </label>
+      <input id="scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Position in the recording">
+      <output id="clock">0:00 / 0:00</output>
+    </section>
+    <p class="hint">Keys: Enter or Space plays and pauses, Left and Right move 10 s, Up and Down change speed.</p>
+
+    <div class="grid">
+      <section class="card readout" aria-label="Live gap">
+        <h2>Live gap to the ghost</h2>
+        <p class="hero"><span id="timeGap">–</span> <span id="timeGapSide" class="side"></span></p>
+        <dl class="tiles">
+          <div><dt>Distance gap</dt><dd id="distGap">–</dd></div>
+          <div><dt>Distance done</dt><dd id="dist">–</dd></div>
+          <div><dt>Speed</dt><dd id="speedNow">–</dd></div>
+          <div><dt>Pace</dt><dd id="pace">–</dd></div>
+          <div><dt>GPS fix to route</dt><dd id="offset">–</dd></div>
+          <div><dt>Age of GPS fix</dt><dd id="fixAge">–</dd></div>
+        </dl>
+      </section>
+
+      <section class="card" aria-label="Map">
+        <h2>Route</h2>
+        <ul class="legend">
+          <li><span class="key dot you"></span>You, snapped to the route</li>
+          <li><span class="key dot ghost"></span>Ghost</li>
+          <li><span class="key dot raw"></span>Raw GPS fix</li>
+        </ul>
+        <div id="map" class="plot map"></div>
+      </section>
+
+      <section class="card wide" aria-label="Gap over time">
+        <h2>Time gap over the recording <span class="unit">seconds; above zero is ahead of the ghost</span></h2>
+        <ul class="legend">
+          <li><span class="key line you"></span>Live</li>
+          <li><span class="key line after"></span>Computed afterwards</li>
+          <li><span class="key band"></span>Afterwards ± 3 s (the B1 target)</li>
+        </ul>
+        <div id="chart" class="plot chart"></div>
+        <div id="tip" class="tip" hidden></div>
+        <details id="tableBox">
+          <summary>Readings as a table</summary>
+          <p><button id="csv" type="button">Download all readings (CSV)</button></p>
+          <div class="scroll"><table id="table"></table></div>
+        </details>
+      </section>
+
+      <section class="card wide" aria-label="B1 result">
+        <h2>B1 check for this pair <span id="verdict" class="chip"></span></h2>
+        <p class="note">The whole recording is replayed in an instant when it loads. Each one-second live reading is compared with the gap computed afterwards from the complete recording.</p>
+        <table id="b1" class="stats"></table>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="replay.js"></script>
+</body>
+</html>

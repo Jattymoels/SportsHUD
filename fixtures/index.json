@@ -1,0 +1,33 @@
+{
+  "pairs": [
+    {
+      "id": "run",
+      "label": "Run (synthetic)",
+      "ghost": "synthetic/run-a.gpx",
+      "runner": "synthetic/run-b.gpx",
+      "synthetic": true
+    },
+    {
+      "id": "ride",
+      "label": "Ride (synthetic)",
+      "ghost": "synthetic/ride-a.gpx",
+      "runner": "synthetic/ride-b.gpx",
+      "synthetic": true
+    },
+    {
+      "id": "walk",
+      "label": "Walk (synthetic)",
+      "ghost": "synthetic/walk-a.gpx",
+      "runner": "synthetic/walk-b.gpx",
+      "synthetic": true
+    },
+    {
+      "id": "walk-sparse",
+      "label": "Walk, a fix every 1 to 6 s (synthetic)",
+      "ghost": "synthetic/walk-a.gpx",
+      "runner": "synthetic/walk-b-sparse.gpx",
+      "synthetic": true,
+      "stress": true
+    }
+  ]
+}

@@ -52,6 +52,8 @@ Export two activities on the same route as GPX from Strava or Garmin. They must 
   node tools/b1.mjs path/to/ghost.gpx path/to/yours.gpx
   ```
 
+  Add `--elapsed` to keep the clocks running through pauses, as in a race. The harness has the same choice under "Clock".
+
 - **To keep them as test fixtures:** put the files in `fixtures/recorded/` and add an entry to `fixtures/index.json`:
 
   ```json
@@ -68,11 +70,15 @@ A GPX file shows exactly where you ran, including where a run starts and ends. T
 - **Distance gap:** your distance along the route minus the ghost's, at the same elapsed time.
 - **Time gap:** the elapsed time at which the ghost reached the spot you are at now, minus your elapsed time.
 - **Sign:** positive means you are ahead of the ghost, negative means behind.
-- **Clocks:** each recording's clock starts at its first point and keeps running through stops. Time spent standing at a crossing counts.
+- **Clocks:** each recording's clock starts at its first point. There are two ways to run them:
+  - **Paused time doesn't count** (the default, for everyday runs). This is the time a watch displays. Where a recording was paused, at a crossing say, its clock stops. So if the ghost waited three minutes at a light and you waited one, neither wait changes the gap.
+  - **The clock never stops** (for races). This is elapsed time: every second counts, including waits.
+
+  A recording's pauses are the holes a paused watch leaves in it. In live use something has to say when you have paused: the engine's tracker has `pause()` and `resume()` for that, but nothing calls them yet. On the glasses that will be an auto-pause or a gesture, which comes with build 2.
 
 Three things real recordings made necessary:
 
-- **Where the ghost stood still.** At a traffic light the ghost was at one spot for a while, not an instant. Within 15 m of such a stop the time gap is measured against the whole stay: you are ahead until the ghost arrived there, behind once it had left, and level in between. Otherwise the reading would flip by the length of the stop with every metre of GPS wobble while you wait at the same light. The gap still jumps as you leave the spot, by however much shorter or longer your wait was.
+- **Where the ghost stood still.** This matters on the never-stopping clock, or when a watch was left running through a wait. At a traffic light the ghost was at one spot for a while, not an instant. Within 15 m of such a stop the time gap is measured against the whole stay: you are ahead until the ghost arrived there, behind once it had left, and level in between. Otherwise the reading would flip by the length of the stop with every metre of GPS wobble while you wait at the same light. The gap still jumps as you leave the spot, by however much shorter or longer your wait was.
 - **Off the route.** If you are more than 15 m from the ghost's route and not travelling along it (cutting a corner, crossing somewhere else), there is nothing to measure progress against. Progress is held where it was and picked up again where you rejoin. Being far from the route but moving along it, on the other side of a wide road say, still counts as on it.
 - **Holes in a recording.** A watch with auto-pause saves nothing while you stand still, so the file has a hole at each stop. A phone in live use reports about once a second regardless. So a replay fills each hole with positions on the straight line across it.
 

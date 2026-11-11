@@ -22,6 +22,7 @@ function svgEl(name, attrs = {}, parent = null, text = null) {
 const state = {
   pairs: [],
   custom: { ghost: null, runner: null },
+  loaded: null, // the two recordings on screen, kept so the clock can be switched
   check: null, // the engine's B1 check for the loaded pair (route, ghost, whole-recording series)
   replay: null,
   live: [], // one-second readings produced so far by the replay on screen
@@ -72,17 +73,18 @@ async function loadPair(id) {
 
 function start(ghostRecording, runnerRecording) {
   try {
-    state.check = checkB1(ghostRecording, runnerRecording);
+    state.check = checkB1(ghostRecording, runnerRecording, { clock: $('clockMode').value });
   } catch (error) {
     showMessage(error.message);
     return;
   }
+  state.loaded = { ghost: ghostRecording, runner: runnerRecording };
   const { route, ghost, runnerFixes, live } = state.check;
   // Two recordings of different routes still produce numbers; say so.
   const offsets = live.map((s) => s.offset).sort((a, b) => a - b);
   const typical = offsets[Math.floor(offsets.length / 2)];
   showMessage(typical > 25 ? `These two recordings are typically ${Math.round(typical)} m apart, so they may not follow the same route. The gap below will not mean much.` : null);
-  state.replay = createReplay(route, ghost, runnerFixes);
+  state.replay = createReplay(route, ghost, runnerFixes, { pauses: state.check.pauses });
   state.live = [];
   state.time = 0;
   state.playing = false;
@@ -325,7 +327,7 @@ function drawReadout(reading) {
   $('speedNow').textContent = `${(Math.max(0, reading.speed) * 3.6).toFixed(1)} km/h`;
   $('pace').textContent = reading.speed > 0.3 ? `${clock(1000 / reading.speed)} /km` : '–';
   $('offset').textContent = `${reading.offset.toFixed(1)} m${reading.offRoute ? ' (off route)' : ''}`;
-  $('fixAge').textContent = `${reading.fixAge.toFixed(0)} s`;
+  $('time').textContent = `${clock(reading.time)}${reading.paused ? ' (paused)' : ''}`;
 }
 
 function renderB1() {
@@ -343,7 +345,9 @@ function renderB1() {
     if (error > Math.abs(live[worstAt].timeGap - afterwards[worstAt].timeGap)) worstAt = i;
   }
   const count = (n) => `${n.toLocaleString('en')} of ${stats.samples.toLocaleString('en')}`;
+  const paused = `you ${clock(stats.pausedS.runner)}, ghost ${clock(stats.pausedS.ghost)}`;
   const rows = [
+    ['Clock', stats.clock === 'moving' ? `paused time not counted (${paused})` : 'never stops'],
     [`Live readings within ${stats.targetS} s of the gap computed afterwards, allowing a jump in the gap to land up to ${stats.slackS} s early or late`, `${percent(stats.within)} (${count(stats.samples - stats.misses.length)})`],
     [`Live readings within ${stats.targetS} s at exactly the same instant`, `${percent(stats.withinSameInstant)} (${count(stats.samples - stats.sameInstantMisses.length)})`],
     ['Largest difference at the same instant', `${stats.maxTimeError.toFixed(2)} s, at ${clock(live[worstAt]?.t ?? 0)}`],
@@ -484,6 +488,10 @@ async function init() {
   $('play').addEventListener('click', () => setPlaying(!state.playing));
   $('restart').addEventListener('click', () => seek(0));
   $('speed').addEventListener('change', (event) => setSpeed(Number(event.target.value)));
+  if (params.get('clock') === 'elapsed') $('clockMode').value = 'elapsed';
+  $('clockMode').addEventListener('change', () => {
+    if (state.loaded) start(state.loaded.ghost, state.loaded.runner);
+  });
   $('scrub').addEventListener('input', (event) => seek(Number(event.target.value)));
   $('pair').addEventListener('change', (event) => {
     if (event.target.value === 'custom') start(state.custom.ghost, state.custom.runner);

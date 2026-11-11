@@ -2,7 +2,7 @@
 // plain numbers. No display code and no sport-specific code lives under engine/.
 
 export { haversine, createProjection } from './geo.js';
-export { parseGpx, toFixes, findPauses } from './gpx.js';
+export { parseGpx, toFixes, toGpx, findPauses } from './gpx.js';
 export { movingTime, createClock } from './clock.js';
 export { buildRoute, snapToRoute, pointAtDistance } from './route.js';
 export {
@@ -18,10 +18,13 @@ export {
   STOP_DEFAULTS,
   findStops,
   prepareGhost,
+  ghostFromFixes,
   gapAt,
   createGapTracker,
   gapSeriesAfterwards,
   compareGapSeries,
 } from './gap.js';
 export { speedOfPace, paceOf, paceGapAt, createPaceTracker, paceSeriesAfterwards } from './pace.js';
+export { AUTOPAUSE_DEFAULTS, createAutoPause } from './autopause.js';
+export { createRunSession } from './session.js';
 export { fillGaps, createReplay, checkB1, checkPace } from './replay.js';

@@ -109,6 +109,17 @@ export function findStops(profile, options) {
 export function prepareGhost(recording, options) {
   const fixes = toFixes(recording);
   const pauses = options?.clock === 'elapsed' ? [] : findPauses(fixes, options);
+  return ghostFromFixes(fixes, pauses, options);
+}
+
+/**
+ * The same, from fixes and pauses already in hand: a run this app recorded
+ * itself, which knows its own pauses and has no holes to find them by.
+ *
+ * @param {Array<{t:number, lat:number, lon:number}>} fixes
+ * @param {Array<{start:number, end:number}>} pauses to take out of the ghost's clock; none for a clock that never stops
+ */
+export function ghostFromFixes(fixes, pauses, options) {
   const route = buildRoute(fixes, options);
   const profile = projectRecording(route, fixes, options);
   profile.t = profile.t.map((t) => movingTime(pauses, t));

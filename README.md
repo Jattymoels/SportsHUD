@@ -12,12 +12,13 @@ Build 1 of the spec: the track engine and a desk replay harness.
 | Folder | What it holds |
 | --- | --- |
 | `engine/` | The track engine: reads GPX, snaps positions to a route, measures distance along it or without it, and computes the time and distance gap to a ghost. The ghost is either a recording of the same route or a set pace on any route. A plain JavaScript library with no display code and nothing sport-specific. Tests are in `engine/tests/`. |
+| `apps/ghost/` | Ghost run, the first prototype of the race screen: a 600×600 display driven by the arrow keys and Enter, that races a pace or a past run using live GPS. Made to be tried on a phone, standing in for the glasses. |
 | `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to either kind of ghost. |
 | `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. |
 | `tools/` | A small local web server and a command-line B1 report. |
 | `docs/` | The spec and research notes. |
 
-The other apps in the spec (`apps/ghost/`, `apps/probe/`, `apps/route/`, `apps/golf/`) come with builds 2 to 5.
+The other apps in the spec (`apps/probe/`, `apps/route/`, `apps/golf/`) come with builds 3 to 5.
 
 ## Running it
 
@@ -40,6 +41,19 @@ npm run b1
 ```
 
 prints the B1 result for every pair of recordings in `fixtures/index.json`.
+
+## Ghost run, on a phone
+
+Open `apps/ghost/` on the phone, outdoors, and allow location.
+
+1. Choose a ghost: a pace (left and right change it), or one of your saved runs to race on its route.
+2. Tap as you set off. The big number is seconds ahead of or behind the ghost; the ghost is on the road ahead when it leads, and marked behind you when you do.
+3. Stop at a light and the clock stops with you. Set off and it starts again.
+4. Tap for the menu to finish. The run is saved on the phone and becomes a ghost for next time.
+
+Swipes are the arrow keys and a tap is Enter, which is all the glasses have. Keep the page open and the screen on: a phone that locks stops reporting where it is. Runs are kept in the browser's storage on that device, the latest eight, and nowhere else. "Download my latest run" saves one as GPX.
+
+`apps/ghost/?demo=run&speed=10` plays a sample run without GPS.
 
 ## Using your own recordings
 

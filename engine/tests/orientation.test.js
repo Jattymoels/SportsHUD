@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { angleBetween, cameraPose, createRunSession, buildRoute, paceProfile } from '../index.js';
+import { angleBetween, cameraPose, deviceAxes, mountFrom, headPose, createRunSession, buildRoute, paceProfile } from '../index.js';
 import { path, steady } from './helpers.js';
 
 const deg = (radians) => (radians * 180) / Math.PI;
@@ -82,4 +82,44 @@ test('a pace ghost on a known route has a place on it', () => {
   near(now.ghostDist, 416.7, 0.5);
   near(now.distGap, -116.7, 1.5);
   near(now.timeGap, -28, 0.5);
+});
+
+// ------------------------------------------------- a device on a head --
+
+test('however a device sits on the head, looking along a known bearing fixes the head from then on', () => {
+  // Three ways a phone might be fitted: upright facing forward, flat above the eyes with the screen down, and askew.
+  const fits = [[0, 90, 0], [200, 180, 0], [33, 61, -17]];
+  for (const [alpha, beta, gamma] of fits) {
+    const mount = mountFrom(deviceAxes(alpha, beta, gamma), 70);
+    const then = headPose(deviceAxes(alpha, beta, gamma), mount);
+    bearing(then.yaw, 70, `fit ${alpha},${beta},${gamma}`);
+    near(deg(then.pitch), 0, 1e-6, 'level');
+    near(deg(then.roll), 0, 1e-6, 'not rolled');
+  }
+});
+
+test('turning, nodding and tilting the head come out as yaw, pitch and roll whatever the fit', () => {
+  // Turn the whole device about the world's axes and the head, fixed to it, must be seen to do the same.
+  const about = (axis, degrees, v) => {
+    // Rodrigues' rotation of v about a unit axis.
+    const c = cos(degrees);
+    const s = sin(degrees);
+    const cross = [axis[1] * v[2] - axis[2] * v[1], axis[2] * v[0] - axis[0] * v[2], axis[0] * v[1] - axis[1] * v[0]];
+    const along = axis[0] * v[0] + axis[1] * v[1] + axis[2] * v[2];
+    return v.map((vi, i) => vi * c + cross[i] * s + axis[i] * along * (1 - c));
+  };
+  const turned = (axes, axis, degrees) => ({ x: about(axis, degrees, axes.x), y: about(axis, degrees, axes.y), z: about(axis, degrees, axes.z) });
+  for (const fit of [[0, 90, 0], [200, 180, 0], [33, 61, -17]]) {
+    const start = deviceAxes(...fit);
+    const mount = mountFrom(start, 0); // facing north
+    // About "up", anticlockwise is positive: a turn of the head to the right is negative.
+    bearing(headPose(turned(start, [0, 0, 1], -35), mount).yaw, 35, 'turned right');
+    bearing(headPose(turned(start, [0, 0, 1], 120), mount).yaw, 240, 'turned left');
+    // Facing north, east is to the right: about east, positive lifts the face.
+    near(deg(headPose(turned(start, [1, 0, 0], 20), mount).pitch), 20, 1e-6, 'looking up');
+    near(deg(headPose(turned(start, [1, 0, 0], -15), mount).pitch), -15, 1e-6, 'looking down');
+    // About north, the way faced, positive tips the top of the head to the right.
+    near(deg(headPose(turned(start, [0, 1, 0], 10), mount).roll), 10, 1e-6, 'tilted right');
+    bearing(headPose(turned(start, [0, 1, 0], 10), mount).yaw, 0, 'a tilt is not a turn');
+  }
 });

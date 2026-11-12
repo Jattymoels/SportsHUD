@@ -17,13 +17,14 @@ As of 2026-11-12. One line per behaviour in the [spec](spec.md): what was measur
 | B9 | Look to range | Correct feature in 8 of 10 when features are 15° or more apart | The right feature with the compass up to 6° out, on the made-up hole. The page logs right and wrong on the course | Ready to test | Ten looks on the course with the phone's compass |
 | B10 | Glanceable and silent | Key number read within 2 s; display hides within 1 s of looking down | Hides 0.3 s after the gaze drops past 40° down, at the desk with a slider. The 2-second read has not been tried | Half passes at the desk | The read test with people; the hide with a real tilt sensor |
 
-Two behaviours were added on 2026-11-11 for the pace ghost, and one on 2026-11-12 for sending a ghost to a friend. Their targets are proposals too.
+Two behaviours were added on 2026-11-11 for the pace ghost, and two on 2026-11-12: sending a ghost to a friend, and the ghost placed in the view. Their targets are proposals too.
 
 | ID | Behaviour | Target | Measured so far | Status | Needs next |
 | --- | --- | --- | --- | --- | --- |
 | B11 | Live gap to a ghost holding a set pace | Within 3 s of the gap computed afterwards; distance within 1% of the watch's | Worst 1.4 s on two real runs. Five real runs measure 12.04 to 12.08 km against the 12 km Strava shows: 0.35% to 0.65% over, if Strava's figure is exactly 12.0 | Passes at the desk | A phone outdoors |
 | B12 | Live segments | Recording takes over within 5 s of joining and hands back within 7 s of leaving; no jump in the gap | Made-up run: 5 s and 6 s, largest jump 0.25 s. A real run that takes other streets for about 1.5 km: 5 changes of ghost, largest jump 0.14 s. Seven real pairings: 0.70 s or less | Passes at the desk | A phone outdoors |
 | B13 | A ghost sent as a link | Gap within 1 s of the gap against the original, 19 readings in 20; an hour's run under 2,000 characters | Three real pairings of the 12 km commute: links of 1,407 to 1,607 characters, gap typically 0.11 s different, 19 in 20 within 0.34 to 0.41 s. Made-up run: 0.12 s and 0.35 s. Sending, opening and racing checked in a browser at the desk | Passes at the desk | Send one between two real phones, through a messaging app |
+| B14 | The ghost on the road in a head-worn display, no compass | Heading within 3° for 19 readings in 20; whole ghost on a 30° display for 90% of the route at 10 to 40 m | Made-up sensors wandering 1.5° a minute: typically 1.2°, 19 in 20 within 2.7°. Three real recordings of the commute, 24° × 18° display straight ahead: 95 to 100% at 8 to 20 m, 87 to 94% at 40 m. A head held 12° aside for three minutes is taken for wander: 13.5° out, recovering after | Heading passes in simulation; display passes to 20 m and is just short at 40 m; nothing worn | A phone on the head with the recorder running, then glasses |
 
 ## What this means for the design so far
 
@@ -31,6 +32,7 @@ Two behaviours were added on 2026-11-11 for the pace ghost, and one on 2026-11-1
 - **Past runs are a usable route guide without a map.** Three runs of one route gave its climb and 15 turns that at least two runs agree on. Two runs were not enough to call a wait likely; five runs of a commute, three out and two home, pick out four likely waits each way from ten or more places a run has stopped at once.
 - **Free map data is uneven, as expected.** OpenStreetMap has lines of play for the Grange's East Course but not its West, and no water or toilets at all in the surrounding square. B6's 80% target may not be reachable on map data alone.
 - **Friends do not need a server.** An hour's run is about 1,500 characters once only the moments where pace or direction changed are kept, and a ghost rebuilt from that races within a fraction of a second of the original. That is a link, which the runner sends to whoever they choose.
+- **For a ghost, where the display sits matters far more than how big it is.** On the real commute a display 14° square straight ahead shows the whole ghost on 88 to 99% of the way at 20 m; the same display at the lower right of the view, where today's everyday display glasses put it, never does. Going from 30° to 70° adds a few per cent.
 - **Today's display cannot do the thing the product is aiming at.** A ghost and markers placed in the world need glasses that know where the road is. The through-the-glasses preview shows the aim; the heads-up square is what a Ray-Ban Display could show now.
 
 ## Beyond the behaviours

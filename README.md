@@ -14,6 +14,7 @@ A first version of every build in the spec, at the desk: the track engine, the g
 | --- | --- |
 | `engine/` | The track engine: reads GPX, snaps positions to a route, measures distance along it or without it, and computes the time and distance gap to a ghost. The ghost is a recording of the same route, a set pace on any route, or a set pace with recordings taking over wherever the route shares theirs. A plain JavaScript library with no display code and nothing sport-specific. Tests are in `engine/tests/`. |
 | `apps/ghost/` | Ghost run, the first prototype of the race screen: a 600×600 display driven by the arrow keys and Enter, that races a pace or a past run using live GPS. Made to be tried on a phone, standing in for the glasses. |
+| `apps/ar/` | AR ghost: only what glasses would add to the view, drawn for something worn on the head. One page for glasses that run web pages, a phone in a see-through visor, and a desk. The design it serves is in [docs/design/ghost-glasses.md](docs/design/ghost-glasses.md). |
 | `apps/probe/` | The anchoring probe: the route, its markers and the ghost placed over a phone's camera picture, using GPS and either the compass or the camera's own tracking of the phone's movement. The nearest thing to glasses that place things in the world, and a first measure of how far off the placing is. |
 | `apps/preview/` | Through the glasses: a recorded run from the runner's eyes, with the ghost and distance markers placed in the world along the route. A preview of where the product is heading, with a switch to the heads-up square that today's display can show. Desk tool. |
 | `apps/route/` | The route guide, as far as past runs alone can take it: the route's length, climb, turns and usual waiting places, as a pre-start screen and as cues on the way. No map data yet, so no water or toilets. |
@@ -85,6 +86,23 @@ The probe measures the result: while you move along the route with the phone poi
 On an Android phone in Chrome the probe offers a second way, "Use the camera's own tracking instead of the compass". The browser then follows the phone's movement through its camera, far more steadily than any compass, and the engine finds north by lining the path you walk up with GPS: roughly after 10 m, well after 100 m. Until then the line is placed by the compass, or by the way you were facing when you began. This is the same web technology that glasses running Android XR use, so it is the nearest test of a ghost truly placed on the road. It has been checked only against a stand-in for the browser's tracking, never on a phone.
 
 `apps/probe/?demo=run&speed=5` plays a sample run on a stand-in street, with no camera or compass needed.
+
+## The AR ghost
+
+The aim is glasses that put the ghost on the road in the runner's view. [docs/design/ghost-glasses.md](docs/design/ghost-glasses.md) sets out why a ghost needs far less than general augmented reality, what on sale could carry a first one, and the stages from here to a device of our own.
+
+`apps/ar/` is the software for that: a black page with only the ghost, the line of the route and the markers drawn on it, since black is what a see-through display shows as nothing.
+
+- **The head** comes from the device's motion sensors, with no compass. "Line up" (look level along the route and tap, or press Enter) tells it how the device sits on the head, whichever way round that is, and which way the route runs. From then on `createTravelAnchor` keeps the heading true from the way you run. On made-up sensors that wander 1.5° a minute it is typically 1.2° out. Its weakness is a head held to one side for minutes, which it takes for wander.
+- **The picture** is set to suit what shows it: how many degrees of view it covers, one picture or one for each eye, flipped for a display seen in a mirror, raised, lowered or turned by a degree at a time. The arrow keys do the last two, for glasses or a small remote.
+- **Routes** come from saved runs, a GPX, or a link (`apps/ar/#ghost=...`), which is how a route reaches glasses that have no files.
+- **Recording** saves what the motion sensors and GPS report during a run as a CSV, to test the heading work against a real head.
+
+```bash
+npm run view -- my-run.gpx
+```
+
+prints how much of a route each size and position of display would show a ghost on. On the 12 km commute a display 24° by 18° straight ahead shows the whole ghost on 95 to 100% of the way when it is 8 to 20 m ahead; the same display at the lower right of the view, never.
 
 ## Using your own recordings
 

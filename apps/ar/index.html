@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>AR ghost · SportsHUD</title>
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../../icons/icon-180.png">
+  <script type="module" src="../../offline.js"></script>
+  <link rel="stylesheet" href="ar.css">
+</head>
+<body>
+  <main>
+    <!-- What the glasses show. Black is see-through on glasses, and on a phone reflected in a visor. -->
+    <div id="stage">
+      <canvas id="display" aria-label="The ghost, the route and the markers, as glasses would add them to your view"></canvas>
+      <p id="notice" hidden></p>
+      <button id="leave" type="button" hidden aria-label="Stop wearing: back to the settings">×</button>
+    </div>
+
+    <section id="controls">
+      <div class="row">
+        <button id="wear" type="button" class="primary">Wear it: fill the screen</button>
+        <button id="go" type="button">Line up and start the ghost</button>
+      </div>
+      <p id="status" role="status"></p>
+
+      <div class="row">
+        <label>Route
+          <select id="run"></select>
+        </label>
+        <label>Ghost
+          <select id="ghostKind">
+            <option value="run">That run itself</option>
+            <option value="pace">A set pace along it</option>
+          </select>
+        </label>
+        <label id="paceBox" hidden>Pace per km
+          <input id="ghostPace" type="text" inputmode="numeric" value="5:00" size="5" autocomplete="off">
+        </label>
+      </div>
+      <label class="file">Add a route (GPX of a past run)
+        <input id="import" type="file" accept=".gpx,application/gpx+xml,text/xml">
+      </label>
+
+      <fieldset>
+        <legend>The display</legend>
+        <label>Pictures
+          <select id="layout">
+            <option value="single">One, filling the screen</option>
+            <option value="pair">Two side by side, one for each eye</option>
+          </select>
+        </label>
+        <label>How much of your view each picture covers, left to right <output id="fovValue"></output>
+          <input id="fov" type="range" min="10" max="90" step="1" value="30">
+        </label>
+        <label>Raise or lower the picture <output id="liftValue"></output>
+          <input id="lift" type="range" min="-20" max="20" step="1" value="0">
+        </label>
+        <label>Turn the picture left or right <output id="trimValue"></output>
+          <input id="trim" type="range" min="-20" max="20" step="1" value="0">
+        </label>
+        <label id="spreadBox">Move the two pictures apart or together <output id="spreadValue"></output>
+          <input id="spread" type="range" min="-30" max="30" step="1" value="0">
+        </label>
+        <label class="check"><input type="checkbox" id="mirror"> Flip left to right, for a display seen in a mirror</label>
+        <label class="check"><input type="checkbox" id="upturn"> Flip top to bottom</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Recording the sensors</legend>
+        <label class="check"><input type="checkbox" id="record"> Record what the motion sensors and GPS report while the ghost runs</label>
+        <button id="saveLog" type="button" disabled>Download the recording</button>
+        <p class="note">The recording stays on this device until you send it somewhere. It holds where you went. It is what the heading work needs to be tested against a real head.</p>
+      </fieldset>
+
+      <details open>
+        <summary>What this is, and how to use it</summary>
+        <ul>
+          <li>This page draws only what glasses would add to your view: the ghost standing on the road where it is, a line along the route, a gate at each marker. Everything else is black, which glasses show as nothing.</li>
+          <li>Which way your head faces comes from the device's motion sensors, with no compass. It is kept true by the way you run: over a minute, the middle of where your head points is the way the route goes.</li>
+          <li><b>On glasses that run web pages:</b> open this page on them. Set how much of your view the display covers.</li>
+          <li><b>With a phone in a see-through visor:</b> set the pictures to suit the visor (one or two, flipped if it shows the screen in a mirror), then "Wear it".</li>
+          <li><b>Lining up:</b> stand on the route, look level along it, and tap the picture or press Enter. That tells it how the device sits on your head and which way the route runs. Tap again whenever the line has wandered off the road.</li>
+          <li><b>Keys,</b> for glasses or a small remote: Enter lines up. Left and right turn the picture a degree. Up and down raise and lower it.</li>
+          <li>Routes come from runs saved by <a href="../ghost/">Ghost run</a> on this device, a GPX added here, or a link someone sent.</li>
+          <li><a href="?demo=run&amp;speed=5">Try it without going anywhere</a>: a sample run. Drag to turn your head.</li>
+        </ul>
+      </details>
+      <p><a href="../../">SportsHUD</a></p>
+    </section>
+  </main>
+  <script type="module" src="ar.js"></script>
+</body>
+</html>

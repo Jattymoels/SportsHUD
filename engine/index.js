@@ -26,7 +26,7 @@ export {
   compareGapSeries,
 } from './gap.js';
 export { speedOfPace, paceOf, paceProfile, paceGapAt, createPaceTracker, paceSeriesAfterwards } from './pace.js';
-export { angleBetween, cameraPose, trackedPose } from './orientation.js';
+export { angleBetween, cameraPose, trackedPose, deviceAxes, mountFrom, headPose } from './orientation.js';
 export { SEGMENT_DEFAULTS, createSegmentTracker } from './segments.js';
 export { GUIDE_DEFAULTS, buildGuide, guideFromRuns, groupRuns, groupFixes, elevationAlong, upsAndDowns, findTurns, agreedTurns, findPausePoints, distanceMarkers, upcoming, nextCue, AMENITY_DEFAULTS, amenityQuery, amenitiesAlong, withAmenities } from './guide.js';
 export { AUTOPAUSE_DEFAULTS, createAutoPause } from './autopause.js';
@@ -58,6 +58,7 @@ export {
   scoreLooks,
 } from './golf.js';
 export { COURSE_DEFAULTS, courseFromOsm, holeAt, nearestOnLine } from './course.js';
-export { HEADING_DEFAULTS, createHeadingFuser, turnRate } from './heading.js';
+export { HEADING_DEFAULTS, ANCHOR_DEFAULTS, createHeadingFuser, createTravelAnchor, turnRate } from './heading.js';
 export { ALIGN_DEFAULTS, createAligner } from './align.js';
 export { SHARE_DEFAULTS, thinFixes, trimEnds, packRun, unpackRun } from './share.js';
+export { VIEW_DEFAULTS, smoothPoint, bearingAlong, sight, onDisplay, coverage } from './view.js';

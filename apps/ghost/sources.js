@@ -11,7 +11,7 @@ export function liveSource(onFix, onError) {
     open() {
       if (!navigator.geolocation) return onError({ message: 'This browser has no location service.' });
       watch = navigator.geolocation.watchPosition(
-        (p) => onFix({ lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy }),
+        (p) => onFix({ lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy, stamp: p.timestamp }),
         onError,
         { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
       );

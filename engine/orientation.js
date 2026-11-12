@@ -48,3 +48,35 @@ export function cameraPose(alpha, beta, gamma, screenAngle = 0) {
   const dot = (p, q) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
   return { yaw, pitch, roll: Math.atan2(dot(top, right), dot(top, up)) };
 }
+
+/**
+ * The pose of a device that tracks its own movement, from the rotation its
+ * tracking reports: a quaternion in a frame with y up and, when tracking
+ * began, the device looking along -z with +x to its right. That is the
+ * frame a browser's augmented-reality mode uses.
+ *
+ * @param {{x:number, y:number, z:number, w:number}} q
+ * @returns {{yaw:number, pitch:number, roll:number}} radians, as cameraPose
+ *   gives them, except that yaw is measured from the way the device faced
+ *   when tracking began, not from north. Add the bearing of that direction
+ *   (from createAligner) to get a compass bearing.
+ */
+export function trackedPose(q) {
+  const turn = (v) => {
+    // v + 2w(q × v) + 2 q × (q × v)
+    const c1 = [q.y * v[2] - q.z * v[1], q.z * v[0] - q.x * v[2], q.x * v[1] - q.y * v[0]];
+    const c2 = [q.y * c1[2] - q.z * c1[1], q.z * c1[0] - q.x * c1[2], q.x * c1[1] - q.y * c1[0]];
+    return [v[0] + 2 * (q.w * c1[0] + c2[0]), v[1] + 2 * (q.w * c1[1] + c2[1]), v[2] + 2 * (q.w * c1[2] + c2[2])];
+  };
+  const look = turn([0, 0, -1]);
+  const top = turn([0, 1, 0]);
+  const flat = Math.hypot(look[0], look[2]) || 1e-9;
+  const right = [-look[2] / flat, 0, look[0] / flat]; // level, to the right of the view
+  const up = [right[1] * look[2] - right[2] * look[1], right[2] * look[0] - right[0] * look[2], right[0] * look[1] - right[1] * look[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  return {
+    yaw: Math.atan2(look[0], -look[2]),
+    pitch: Math.asin(Math.max(-1, Math.min(1, look[1]))),
+    roll: Math.atan2(dot(top, right), dot(top, up)),
+  };
+}

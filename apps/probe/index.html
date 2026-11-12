@@ -13,6 +13,13 @@
       <video id="camera" playsinline muted autoplay></video>
       <canvas id="overlay" aria-label="The camera's view with the route, markers and ghost placed over it"></canvas>
       <p id="notice" hidden></p>
+      <div id="trackBar" hidden>
+        <p id="trackStatus" role="status"></p>
+        <div class="row">
+          <button id="trackGo" type="button" class="primary">Start the ghost</button>
+          <button id="trackLeave" type="button">Leave tracking</button>
+        </div>
+      </div>
     </div>
 
     <section id="controls">
@@ -40,6 +47,11 @@
         <input id="import" type="file" accept=".gpx,application/gpx+xml,text/xml">
       </label>
 
+      <div id="trackBox" hidden>
+        <button id="track" type="button">Use the camera's own tracking instead of the compass</button>
+        <p class="note">This phone's browser can follow the phone's movement through the camera, far more steadily than a compass. It does not know where north is: it finds that by comparing the path you walk with GPS, roughly after 10 m and well after 100 m. Not yet tried outdoors.</p>
+      </div>
+
       <fieldset>
         <legend>Lining it up</legend>
         <label>Turn the picture left or right <output id="offsetValue"></output>
@@ -66,6 +78,7 @@
           <li>Pick a route you have run, and stand on it, facing along it, with the phone upright.</li>
           <li>The blue line should lie on the path. If it points off to one side, use "Turn the picture". If things look too big or too small, change how wide the camera sees.</li>
           <li>Then start the ghost and walk or jog the route with the phone held in front of you.</li>
+          <li>On an Android phone in Chrome there is a second way: "Use the camera's own tracking". The picture fills the screen and the line is held by the camera's tracking rather than the compass. Walk 30 m or more along the route and watch whether the line settles onto the path and stays there.</li>
           <li>Routes come from runs saved by <a href="../ghost/">Ghost run</a> on this phone, or a GPX you add here.</li>
           <li><a href="?demo=run&amp;speed=5">Try it without going anywhere</a>: a sample run on a stand-in street. Drag to look around.</li>
         </ul>

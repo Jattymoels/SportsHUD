@@ -33,6 +33,8 @@ export function saveRuns(runs) {
     const sent = real.filter((r) => r.from != null).slice(0, Math.ceil(keep / 2));
     try {
       localStorage.setItem(RUNS_KEY, JSON.stringify(real.filter((r) => own.includes(r) || sent.includes(r))));
+      // Ask the browser not to clear these away when the device runs short of room. It may say no.
+      navigator.storage?.persist?.().catch(() => {});
       return;
     } catch {
       // Too big: try again with fewer.
@@ -111,6 +113,43 @@ export function runFromGpx(text, demo = false) {
     pauses,
     demo,
   });
+}
+
+/** Every saved run in one file, to keep somewhere safe or to move to another phone. */
+export function backupText(runs) {
+  return JSON.stringify({ app: 'sportshud', kind: 'runs', version: 1, savedAt: Date.now(), runs: runs.filter((r) => !r.demo) });
+}
+
+/** The runs in a backup file, each checked to be the shape a stored run has. Throws, with a reason fit to show, if it is not a backup. */
+export function runsFromBackup(text) {
+  let file;
+  try {
+    file = JSON.parse(text);
+  } catch {
+    throw new Error('not a SportsHUD backup');
+  }
+  if (file?.app !== 'sportshud' || file.kind !== 'runs' || !Array.isArray(file.runs)) throw new Error('not a SportsHUD backup');
+  const number = (v) => typeof v === 'number' && Number.isFinite(v);
+  const sound = file.runs.filter(
+    (r) =>
+      r && number(r.startedAt) && number(r.distance) && number(r.time) &&
+      Array.isArray(r.fixes) && r.fixes.length >= 2 && r.fixes.length <= 200000 &&
+      r.fixes.every((f) => Array.isArray(f) && number(f[0]) && number(f[1]) && number(f[2]) && Math.abs(f[1]) <= 90 && Math.abs(f[2]) <= 180) &&
+      (r.pauses ?? []).every((q) => q && number(q.start) && number(q.end)),
+  );
+  if (!sound.length) throw new Error('no runs in this backup');
+  // Rebuilt field by field, so nothing else in the file comes along.
+  return sound.map((r) => ({
+    ...(typeof r.from === 'string' ? { from: r.from.slice(0, 24) } : {}),
+    id: String(r.startedAt),
+    startedAt: r.startedAt,
+    distance: r.distance,
+    time: r.time,
+    secondsPerKm: r.distance > 50 ? r.time / (r.distance / 1000) : null,
+    fixes: r.fixes.map((f) => [f[0], f[1], f[2]]),
+    pauses: (r.pauses ?? []).map((q) => ({ start: q.start, end: q.end })),
+    demo: false,
+  }));
 }
 
 /** A run sent as a link, as a stored run. Throws, with a reason fit to show, if the text is not one. */

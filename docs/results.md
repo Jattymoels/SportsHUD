@@ -33,6 +33,17 @@ Two behaviours were added on 2026-11-11 for the pace ghost, and one on 2026-11-1
 - **Friends do not need a server.** An hour's run is about 1,500 characters once only the moments where pace or direction changed are kept, and a ghost rebuilt from that races within a fraction of a second of the original. That is a link, which the runner sends to whoever they choose.
 - **Today's display cannot do the thing the product is aiming at.** A ghost and markers placed in the world need glasses that know where the road is. The through-the-glasses preview shows the aim; the heads-up square is what a Ray-Ban Display could show now.
 
+## Beyond the behaviours
+
+Things a product needs that are not behaviours in the spec, and where each stands. The full list is in [research/hardware-and-market.md](research/hardware-and-market.md).
+
+| What | Where it stands |
+| --- | --- |
+| Opens from the home screen | Built. Checked at the desk that the browser is given what it asks for; not installed on a phone |
+| Works with no signal | Built. At the desk, after one visit and with the server taken away, all seven pages load and a sample run plays |
+| Runs survive a lost or cleared phone | One file backs up every run and loads into another browser. Checked at the desk |
+| Keeps running with the phone locked | Not possible for a web page. Needs the app on the glasses, or a small native app on the phone |
+
 ## Not yet known
 
 - Whether any of it holds up outdoors: GPS on a phone in a pocket or hand, the compass while running, a screen in daylight.

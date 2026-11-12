@@ -222,8 +222,18 @@ The course file is derived from OpenStreetMap, © OpenStreetMap contributors, an
 
 Not built yet: the West Course. B7 and B9 are ready to test on the East Course but untested.
 
+## On the home screen, and with no signal
+
+The site can be added to a phone's home screen from the browser's menu ("Add to Home screen" or "Install app"). It then opens full screen, like an app.
+
+It also works with no signal, on a course or a trail. `sw.js` keeps a copy of every file the site is made of on the device. The network is asked first, so a new version is picked up whenever there is a signal; if it has not answered within three seconds, or cannot, the kept copy is used. The first visit fetches every page, not only the one opened. Saved runs were on the device already. What still needs a signal is anything looked up elsewhere: the wind, and water and toilets.
+
+On an iPhone, a site on the home screen keeps its runs apart from the same site in Safari. Add it to the home screen first, then add your runs there.
+
+"Download all my runs (backup)" in Ghost run saves every run on the device, friends' ghosts included, as one file. Loading that file where a GPX would go brings them back, on the same phone or another. Saving a run also asks the browser not to clear the site's storage when the device runs short of room; a browser may refuse.
+
 ## Deployment
 
-`.github/workflows/pages.yml` runs the tests on every push. A push to the default branch that passes them is published to GitHub Pages.
+`.github/workflows/pages.yml` runs the tests on every push. A push to the default branch that passes them is published to GitHub Pages. `tools/site.mjs` says which files make up the site, copies them, and writes the list of them (`precache.json`) that the offline copy is fetched from. `node tools/site.mjs --list` writes that list in place, for trying offline use at the desk.
 
 One-time setup: in the repository's **Settings → Pages**, set **Build and deployment → Source** to **GitHub Actions**. The site then appears at `https://<owner>.github.io/SportsHUD/`.

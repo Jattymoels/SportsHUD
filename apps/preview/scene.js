@@ -10,8 +10,8 @@ import { ghostGlyph, drawRun, clock, pace, INK, AHEAD, BEHIND, FONT } from '../g
 
 const RAD = Math.PI / 180;
 const EYE = 1.6; // metres above the ground
-const EYE_FOV = 64; // degrees of your view the picture spans, left to right
-const PITCH = -5 * RAD; // looking slightly down, as a runner does
+export const VIEW_FOV = 64; // degrees of your view the picture spans, left to right, unless told otherwise
+const RUNNER_PITCH = -5 * RAD; // looking slightly down, as a runner does
 const GUIDE = '#8fdcff';
 const MARKER = '#ffe9a8';
 
@@ -57,15 +57,25 @@ function ahead(from, to, reach) {
  * @param {'anchored'|'square'} v.style what the glasses draw
  * @param {{w:number, h:number}|null} v.display degrees of view the display covers; null for all of it
  * @param {number} v.markerEvery metres between distance markers
+ * @param {number} [v.fov] degrees the picture spans, left to right
+ * @param {number} [v.pitch] radians the gaze is above the horizon
+ * @param {number} [v.roll] radians the view is tilted clockwise
+ * @param {boolean} [v.world] draw the stand-in street; false when a camera
+ *   picture is behind the canvas instead
+ * @param {boolean} [v.readouts] show the gap and pace; false while lining up
+ * @param {number} [v.unit] canvas pixels per unit of text and line size
  */
 export function drawScene(ctx, W, H, route, v) {
-  const focal = W / 2 / Math.tan((EYE_FOV / 2) * RAD);
-  const u = W / 1280; // sizes below are for a picture 1280 wide
+  const focal = W / 2 / Math.tan(((v.fov ?? VIEW_FOV) / 2) * RAD);
+  const u = v.unit ?? W / 1280; // sizes below are for a picture 1280 wide, unless told the unit
+  const pitch = v.pitch ?? RUNNER_PITCH;
   const here = steady(route, v.dist);
   const sin = Math.sin(v.yaw);
   const cos = Math.cos(v.yaw);
-  const sp = Math.sin(PITCH);
-  const cp = Math.cos(PITCH);
+  const sp = Math.sin(pitch);
+  const cp = Math.cos(pitch);
+  const sr = Math.sin(-(v.roll ?? 0));
+  const cr = Math.cos(-(v.roll ?? 0));
   /** A point in the world (x east, y north, z up, metres) on the screen; null if behind you. */
   const project = (x, y, z = 0) => {
     const dx = x - here.x;
@@ -75,21 +85,34 @@ export function drawScene(ctx, W, H, route, v) {
     const up = z - EYE;
     const forward = flat * cp + up * sp;
     if (forward < 0.8) return null;
-    return { x: W / 2 + (focal * right) / forward, y: H / 2 - (focal * (up * cp - flat * sp)) / forward, depth: forward, bearing: Math.atan2(right, flat) };
+    // On the picture, before and then after allowing for a tilted head.
+    const px = (focal * right) / forward;
+    const py = -(focal * (up * cp - flat * sp)) / forward;
+    return { x: W / 2 + px * cr - py * sr, y: H / 2 + px * sr + py * cr, depth: forward };
   };
-  const horizon = H / 2 + focal * Math.tan(PITCH);
+  const horizon = H / 2 + focal * Math.tan(pitch);
+  const world = v.world ?? true;
 
   // ------------------------------------------------- the world, as it is --
-  const sky = ctx.createLinearGradient(0, 0, 0, horizon);
-  sky.addColorStop(0, '#15202e');
-  sky.addColorStop(1, '#5d6f7d');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, horizon);
-  const ground = ctx.createLinearGradient(0, horizon, 0, H);
-  ground.addColorStop(0, '#39413a');
-  ground.addColorStop(1, '#1c211d');
-  ctx.fillStyle = ground;
-  ctx.fillRect(0, horizon, W, H - horizon);
+  ctx.clearRect(0, 0, W, H);
+  if (world) {
+    const far = 2 * Math.hypot(W, H);
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(-(v.roll ?? 0));
+    ctx.translate(-W / 2, -H / 2);
+    const sky = ctx.createLinearGradient(0, horizon - H, 0, horizon);
+    sky.addColorStop(0, '#15202e');
+    sky.addColorStop(1, '#5d6f7d');
+    ctx.fillStyle = sky;
+    ctx.fillRect(-far, horizon - far, 2 * far + W, far);
+    const ground = ctx.createLinearGradient(0, horizon, 0, horizon + H);
+    ground.addColorStop(0, '#39413a');
+    ground.addColorStop(1, '#1c211d');
+    ctx.fillStyle = ground;
+    ctx.fillRect(-far, horizon, 2 * far + W, far);
+    ctx.restore();
+  }
 
   // The path, as a strip 3 m wide, and its centre line for later.
   const samples = ahead(v.dist, route.length, 420).map((d) => {
@@ -101,7 +124,7 @@ export function drawScene(ctx, W, H, route, v) {
     return { d, c, nx, ny, centre: project(c.x, c.y), left: project(c.x - nx * 1.5, c.y - ny * 1.5), right: project(c.x + nx * 1.5, c.y + ny * 1.5) };
   });
   ctx.fillStyle = '#4a4e50';
-  for (let i = samples.length - 1; i > 0; i--) {
+  for (let i = samples.length - 1; world && i > 0; i--) {
     const a = samples[i - 1];
     const b = samples[i];
     if (!a.left || !a.right || !b.left || !b.right) continue;
@@ -114,7 +137,7 @@ export function drawScene(ctx, W, H, route, v) {
   }
   // Posts beside the path every 20 m, so that movement shows.
   ctx.strokeStyle = '#6a7074';
-  for (let d = Math.ceil((v.dist + 3) / 20) * 20; d < Math.min(route.length, v.dist + 260); d += 20) {
+  for (let d = Math.ceil((v.dist + 3) / 20) * 20; world && d < Math.min(route.length, v.dist + 260); d += 20) {
     const c = steady(route, d);
     const n = steady(route, Math.min(route.length, d + 2));
     const len = Math.hypot(n.x - c.x, n.y - c.y) || 1;
@@ -246,14 +269,16 @@ export function drawScene(ctx, W, H, route, v) {
 
     // Fixed in your view, small, along the bottom where the road is nearest:
     // the gap, your pace, and the ghost if it is behind you.
-    const big = Math.max(18 * u, Math.min(60 * u, box.h * 0.14));
+    if (v.readouts ?? true) {
+    const big = Math.max(18 * u, Math.min(60 * u, box.h * 0.14, box.w * 0.1));
     const floor = box.y + box.h - 12 * u;
     const size = Math.abs(v.timeGap);
     const number = size < 0.5 ? 'level' : `${v.timeGap > 0 ? '+' : '−'}${size < 99.5 ? `${Math.round(size)} s` : clock(Math.round(size))}`;
     write(number, box.x + box.w - 12 * u, floor, big, { fill: color, align: 'right', weight: 700 });
     write(v.speed > 0.4 ? `${pace(1000 / v.speed)} /km` : '–:–– /km', box.x + 12 * u, floor, big * 0.5, { align: 'left', weight: 500 });
     if (v.paused) write('PAUSED', W / 2, box.y + big * 0.7, big * 0.5, {});
-    else if (lead != null && lead < -1.2) write(`▼ ghost ${Math.round(-lead)} m behind`, W / 2, floor, big * 0.5, { fill: color });
+    else if (lead != null && lead < -1.2) write(`▼ ghost ${Math.round(-lead)} m behind`, W / 2, floor - big * 1.2, big * 0.5, { fill: color });
+    }
   }
   ctx.restore();
 

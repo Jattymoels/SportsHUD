@@ -35,6 +35,7 @@ export const SEGMENT_DEFAULTS = {
 
 const M_PER_DEG = 111195;
 const SETTLE = 2; // metres the place may drop back in one go, as the tracker settles
+const END_ZONE = 10; // metres from the end of a recording's route that count as having reached it
 
 /**
  * @param {object} setup
@@ -55,6 +56,7 @@ export function createSegmentTracker({ secondsPerKm, tracks }, options) {
   let onTrack = false; // its ghost is the one being raced right now
   let offset = 0; // set pace: gap = offset + distance / speed - time
   let shift = 0; // recording: its clock, slid so the gap carried over
+  let reached = null; // the end of a recording's route, once the runner has followed it there
 
   /** Direction of travel as a unit [east, north]; null if barely moving. */
   function heading(fix) {
@@ -137,7 +139,13 @@ export function createSegmentTracker({ secondsPerKm, tracks }, options) {
         // Standing somewhere off it with the clock stopped is not leaving it.
         if (!p.offRoute || clock.read(fix.t).paused) live.lostSince = null;
         else live.lostSince ??= fix.t;
-        const gone = (live.lostSince != null && fix.t - live.lostSince >= o.leaveSeconds) || p.dist >= tracks[live.index].route.length - 5;
+        const atEnd = p.dist >= tracks[live.index].route.length - END_ZONE;
+        if (atEnd && onTrack) {
+          // Followed to its end: note the gap there before the set pace takes over.
+          const g = gap(fix.t);
+          reached = { track: live.index, time: g.time, timeGap: g.timeGap, distGap: g.distGap };
+        }
+        const gone = atEnd || (live.lostSince != null && fix.t - live.lostSince >= o.leaveSeconds);
         const away = live.lostSince != null && fix.t - live.lostSince >= o.patience;
         race(!away && !gone, fix.t);
         if (gone) live = null;
@@ -173,10 +181,13 @@ export function createSegmentTracker({ secondsPerKm, tracks }, options) {
      * @param {number} t elapsed seconds since the runner's first fix
      * @returns {{t:number, time:number, paused:boolean, dist:number, speed:number, fixAge:number,
      *   timeGap:number, distGap:number, ghost:'pace'|'recording', track:number|null,
-     *   routeDist:number|null, ghostDist:number|null, finished:boolean}|null}
+     *   routeDist:number|null, ghostDist:number|null, finished:boolean,
+     *   reached:{track:number, time:number, timeGap:number, distGap:number}|null}|null}
      *   ghost: which ghost is being raced. track: which recording, by its
      *   place in the list. routeDist, ghostDist: metres along that
-     *   recording's route, for the runner and for its ghost.
+     *   recording's route, for the runner and for its ghost. reached: the
+     *   latest recording whose route the runner followed to its end, with
+     *   the clock and the gap as they stood there.
      */
     at(t) {
       if (!odometer.at(t)) return null;
@@ -195,6 +206,7 @@ export function createSegmentTracker({ secondsPerKm, tracks }, options) {
         routeDist: g.routeDist,
         ghostDist: g.ghostDist,
         finished: false,
+        reached,
       };
     },
   };

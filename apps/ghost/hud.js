@@ -127,6 +127,8 @@ function road(ctx) {
  * @param {boolean} v.paused
  * @param {string|null} v.notice a short word for the top of the screen ("GPS?", "OFF ROUTE")
  * @param {string|null} v.banner a line shown across the road for a few seconds (a split, a pass)
+ * @param {{title:string, distance:string, in:number, side?:'left'|'right'}|null} [v.cue] the next thing
+ *   on the route to act on: named under the clock, and marked on the road once it is within 150 m
  * @param {number} v.float seconds, for the ghost's slow bob; any steadily rising clock
  */
 export function drawRun(ctx, v) {
@@ -155,6 +157,25 @@ export function drawRun(ctx, v) {
     line(ctx, 282, ROAD.base - 16, 300, ROAD.base - 2, color, 3);
     line(ctx, 318, ROAD.base - 16, 300, ROAD.base - 2, color, 3);
     text(ctx, `${Math.round(-ahead)} m behind you`, 300, ROAD.base - 30, 26, { color });
+  }
+  if (v.cue && !v.banner) {
+    // What is coming up on the route: its name and distance under the clock,
+    // and a bar across the road where it is.
+    text(ctx, v.cue.title, 28, 106, 26, { align: 'left', weight: 700 });
+    text(ctx, v.cue.distance, 28, 138, 26, { align: 'left' });
+    if (v.cue.in <= 150) {
+      const y = roadY(v.cue.in);
+      const half = roadHalf(v.cue.in);
+      line(ctx, 300 - half, y, 300 + half, y, INK, 3);
+      if (v.cue.side) {
+        // A turn: an arrowhead on the side it goes.
+        const way = v.cue.side === 'left' ? -1 : 1;
+        const tip = 300 + way * (half + 16);
+        line(ctx, tip, y, tip - way * 12, y - 10, INK, 3);
+        line(ctx, tip, y, tip - way * 12, y + 10, INK, 3);
+        line(ctx, 300 + way * half, y, tip, y, INK, 3);
+      }
+    }
   }
   if (v.banner) {
     // Across the far end of the road, clear of a ghost that is close.

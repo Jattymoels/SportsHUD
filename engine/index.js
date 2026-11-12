@@ -28,7 +28,7 @@ export {
 export { speedOfPace, paceOf, paceProfile, paceGapAt, createPaceTracker, paceSeriesAfterwards } from './pace.js';
 export { angleBetween, cameraPose } from './orientation.js';
 export { SEGMENT_DEFAULTS, createSegmentTracker } from './segments.js';
-export { GUIDE_DEFAULTS, buildGuide, groupRuns, elevationAlong, upsAndDowns, findTurns, agreedTurns, findPausePoints, distanceMarkers, upcoming, nextCue } from './guide.js';
+export { GUIDE_DEFAULTS, buildGuide, guideFromRuns, groupRuns, groupFixes, elevationAlong, upsAndDowns, findTurns, agreedTurns, findPausePoints, distanceMarkers, upcoming, nextCue } from './guide.js';
 export { AUTOPAUSE_DEFAULTS, createAutoPause } from './autopause.js';
 export { createRunSession } from './session.js';
 export { fillGaps, createReplay, checkB1, checkPace, checkSegments } from './replay.js';

@@ -6,7 +6,7 @@
 // Position along the route comes from the engine, as everywhere else. The
 // one new live input is which way the phone is facing.
 
-import { ghostFromFixes, paceProfile, createProgressTracker, createRunSession, cameraPose, angleBetween } from '../../engine/index.js';
+import { ghostFromFixes, paceProfile, createProgressTracker, createRunSession, cameraPose, angleBetween, createHeadingFuser, turnRate } from '../../engine/index.js';
 import { drawScene, steady } from '../preview/scene.js';
 import { clock, km, pace } from '../ghost/hud.js';
 import { loadRuns, saveRuns, loadSettings, saveSettings, fixesOf, runFromGpx, loadSample } from '../ghost/store.js';
@@ -108,21 +108,34 @@ function position() {
   return p && { dist: p.dist, speed: Math.max(0, p.speed), offRoute: p.offRoute, reading: null };
 }
 
+// The heading is kept by the engine: the gyroscope from moment to moment,
+// the compass over seconds, and the compass's steady error learned from the
+// way we are moving along the route.
+const fuser = createHeadingFuser();
+const seconds = () => performance.now() / 1000;
+
 function onOrientation(event) {
   // Use readings measured from north: Android's absolute event, or iOS's compass heading.
   const alpha = event.webkitCompassHeading != null ? 360 - event.webkitCompassHeading : event.absolute ? event.alpha : null;
   if (alpha == null || event.beta == null || event.gamma == null) return;
   const raw = cameraPose(alpha, event.beta, event.gamma, screen.orientation?.angle ?? 0);
-  if (!state.pose) {
-    state.pose = raw;
-    return;
-  }
-  // Steady it a little: the sensors jitter, and a bobbing phone more so.
+  fuser.compass(raw.yaw / RAD, seconds());
+  const fused = fuser.at(seconds());
+  // With the correction switched off, the compass as it comes, steadied a little.
+  const before = state.pose ?? raw;
+  const plain = (state.compass ?? raw.yaw) + angleBetween(state.compass ?? raw.yaw, raw.yaw) * 0.25;
+  state.compass = plain;
   state.pose = {
-    yaw: state.pose.yaw + angleBetween(state.pose.yaw, raw.yaw) * 0.25,
-    pitch: state.pose.pitch + (raw.pitch - state.pose.pitch) * 0.25,
-    roll: state.pose.roll + angleBetween(state.pose.roll, raw.roll) * 0.25,
+    yaw: $('correct').checked ? fused.yaw * RAD : plain,
+    pitch: before.pitch + (raw.pitch - before.pitch) * 0.25,
+    roll: before.roll + angleBetween(before.roll, raw.roll) * 0.25,
   };
+}
+
+function onMotion(event) {
+  if (!event.rotationRate || !event.accelerationIncludingGravity) return;
+  const rate = turnRate(event.rotationRate, event.accelerationIncludingGravity);
+  if (rate != null) fuser.gyro(rate, seconds());
 }
 
 async function openCamera() {
@@ -149,9 +162,13 @@ function checkHeading() {
   if (!state.pose) return;
   const here = position();
   if (!here || here.offRoute || here.speed < 1) return;
+  const along = routeBearing(state.course.route, here.dist);
+  // Teach the heading what the compass's steady error is, from the way we are going.
+  fuser.travel((((along / RAD) % 360) + 360) % 360, here.speed, seconds());
   const facing = state.pose.yaw + state.settings.offset * RAD;
-  const error = angleBetween(routeBearing(state.course.route, here.dist), facing) / RAD;
-  state.readings.push({ t: Math.round(performance.now() / 100) / 10, speed: here.speed, error });
+  const error = angleBetween(along, facing) / RAD;
+  const alone = angleBetween(along, state.compass + state.settings.offset * RAD) / RAD;
+  state.readings.push({ t: Math.round(performance.now() / 100) / 10, speed: here.speed, error, alone });
   showResults();
 }
 
@@ -159,7 +176,7 @@ function showResults() {
   const table = $('results');
   table.replaceChildren();
   const head = table.insertRow();
-  for (const title of ['', 'Readings', 'Typical error', 'Leans', 'Target']) {
+  for (const title of ['', 'Readings', 'Compass alone', 'Typical error', 'Leans', 'Target']) {
     const th = document.createElement('th');
     th.textContent = title;
     head.append(th);
@@ -171,10 +188,12 @@ function showResults() {
   for (const [label, readings, target] of rows) {
     const tr = table.insertRow();
     const typical = readings.length ? median(readings.map((r) => Math.abs(r.error))) : null;
+    const alone = readings.length ? median(readings.map((r) => Math.abs(r.alone ?? r.error))) : null;
     const lean = readings.length ? median(readings.map((r) => r.error)) : null;
     const cells = [
       label,
       String(readings.length),
+      alone == null ? '–' : `${alone.toFixed(1)}°`,
       typical == null ? '–' : `${typical.toFixed(1)}°`,
       lean == null ? '–' : Math.abs(lean) < 0.5 ? 'neither way' : `${Math.abs(lean).toFixed(1)}° ${lean > 0 ? 'right' : 'left'}`,
       typical == null ? `under ${target}°` : `under ${target}°: ${typical < target ? 'met' : 'not met'}`,
@@ -195,7 +214,7 @@ function matchCompass() {
 }
 
 function downloadCsv() {
-  const lines = ['t_s,speed_mps,compass_minus_travel_deg', ...state.readings.map((r) => `${r.t},${r.speed.toFixed(2)},${r.error.toFixed(1)}`)];
+  const lines = ['t_s,speed_mps,shown_minus_travel_deg,compass_alone_minus_travel_deg', ...state.readings.map((r) => `${r.t},${r.speed.toFixed(2)},${r.error.toFixed(1)},${(r.alone ?? r.error).toFixed(1)}`)];
   const url = URL.createObjectURL(new Blob([lines.join('\n') + '\n'], { type: 'text/csv' }));
   const link = document.createElement('a');
   link.href = url;
@@ -271,6 +290,8 @@ function showStatus(here) {
   else if (state.gpsError) parts.push(state.gpsError + '.');
   else if (state.lastFix) parts.push(`GPS good to ${Math.round(state.lastFix.accuracy)} m.`);
   if (state.pose) parts.push(`Facing ${Math.round((((state.pose.yaw / RAD + state.settings.offset) % 360) + 360) % 360)}°.`);
+  const learned = fuser.at(seconds());
+  if (state.pose && $('correct').checked) parts.push(learned?.corrected ? `Compass found to be ${Math.abs(learned.error).toFixed(0)}° ${learned.error > 0 ? 'right' : 'left'} of the way you move; taken off.` : 'Learning the compass: move along the route for a few seconds.');
   if (here) parts.push(`${Math.round(here.dist)} m along the route.`);
   const r = here?.reading;
   if (r) parts.push(Math.abs(r.timeGap) < 0.5 ? 'Level with the ghost.' : `${Math.round(Math.abs(r.timeGap))} s ${r.timeGap > 0 ? 'ahead of' : 'behind'} the ghost.`);
@@ -366,6 +387,7 @@ async function init() {
 
   window.addEventListener('deviceorientationabsolute', onOrientation);
   window.addEventListener('deviceorientation', onOrientation);
+  window.addEventListener('devicemotion', onMotion);
   // Without sensors, drag to look around.
   let drag = null;
   canvas.addEventListener('pointerdown', (event) => {

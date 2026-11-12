@@ -353,15 +353,21 @@ export function agreedTurns(route, runs, options) {
  *
  * @param route from buildRoute
  * @param {Array<Array<{t:number, lat:number, lon:number}>>} runs fixes of each recording, from toFixes
- * @returns {Array<{dist:number, runs:number, of:number, share:number, typical:number, longest:number, waits:number[]}>}
+ * @returns {Array<{dist:number, runs:number, of:number, share:number, typical:number, longest:number, waits:number[], likely:boolean, elsewhere?:object}>}
  *   dist: metres along the route. runs: how many of the `of` recordings
  *   waited there. share: runs / of. typical, longest: seconds waited, the
  *   median and the most. waits: every wait, one per run that waited.
+ *   likely: at least two runs in all waited there, and at least half of
+ *   those that passed (with fewer than three runs to go on, any wait).
+ *   elsewhere, from buildGuide's `others`: `{runs, of, typical, longest}`
+ *   for runs of other routes that cover this ground.
  *   A wait by a paused watch is timed exactly; one where the watch kept
  *   running reads a few seconds short, the time taken to slow and set off.
  */
 export function findPausePoints(route, runs, options) {
-  return gatherWaits(route, runs.map((fixes) => standingIn(route, fixes, options)), options);
+  const o = { ...GUIDE_DEFAULTS, ...options };
+  const places = gatherWaits(route, runs.map((fixes) => standingIn(route, fixes, options)), options);
+  return addElsewhere(places, { seen: [], passes: () => 0 }, runs.length, route.length, o);
 }
 
 /** Where one recording stood still along the route, ends of the route aside. */
@@ -378,6 +384,87 @@ function standingIn(route, fixes, options) {
     .filter(stoodStill)
     .map((stop) => ({ dist: (stop.lo + stop.hi) / 2, wait: stop.depart - stop.arrive }))
     .filter((stop) => stop.dist >= o.endZone && stop.dist <= route.length - o.endZone);
+}
+
+/**
+ * Where runs of other routes stood still on ground this route covers, placed
+ * along this route, and a way to ask how many of them pass a given place.
+ */
+function standingElsewhere(route, others, options) {
+  const o = { ...GUIDE_DEFAULTS, ...options };
+  const whole = { near: 0, window: Infinity, nearSigma: 1e12 };
+  const lines = [];
+  const seen = [];
+  others.forEach((fixes, run) => {
+    let own;
+    try {
+      own = buildRoute(fixes, options);
+    } catch {
+      return; // too short to be a run of anything
+    }
+    lines.push(own);
+    for (const stop of standingIn(own, fixes, options)) {
+      const where = pointAtDistance(own, stop.dist);
+      const snap = snapToRoute(route, where.lat, where.lon, whole);
+      if (snap.offset <= o.offRoute) seen.push({ dist: snap.dist, wait: stop.wait, run });
+    }
+  });
+  const passes = (dist) => {
+    const where = pointAtDistance(route, dist);
+    return lines.filter((own) => snapToRoute(own, where.lat, where.lon, whole).offset <= o.offRoute).length;
+  };
+  return { seen, passes };
+}
+
+/**
+ * Add what runs of other routes saw to the places runs of this route waited,
+ * and say for each place whether a wait there is likely: at least two runs
+ * waited, and at least half of those that passed it, counting either this
+ * route's runs alone or all runs together.
+ */
+function addElsewhere(places, { seen, passes }, runsOfRoute, routeLength, o) {
+  const sum = (stops, dist) => {
+    const byRun = new Map();
+    for (const s of stops) byRun.set(s.run, (byRun.get(s.run) ?? 0) + s.wait);
+    const waits = [...byRun.values()];
+    return { runs: waits.length, of: Math.max(passes(dist), waits.length), typical: median(waits), longest: Math.max(...waits) };
+  };
+  let left = [...seen].sort((a, b) => a.dist - b.dist);
+  for (const place of places) {
+    const here = left.filter((s) => Math.abs(s.dist - place.dist) <= o.pauseWithin);
+    if (!here.length) continue;
+    place.elsewhere = sum(here, place.dist);
+    left = left.filter((s) => !here.includes(s));
+  }
+  // Places only the other routes' runs waited at.
+  const groups = [];
+  for (const stop of left) {
+    const last = groups[groups.length - 1];
+    if (last && stop.dist - last[last.length - 1].dist <= o.pauseWithin) last.push(stop);
+    else groups.push([stop]);
+  }
+  for (const stops of groups) {
+    const dist = stops.reduce((total, s) => total + s.dist, 0) / stops.length;
+    if (dist < o.endZone || dist > routeLength - o.endZone) continue;
+    const elsewhere = sum(stops, dist);
+    places.push({ dist, runs: 0, of: runsOfRoute, share: 0, typical: elsewhere.typical, longest: elsewhere.longest, waits: [], elsewhere });
+  }
+  for (const place of places) {
+    // Runs of other routes that passed here without waiting count against it too.
+    if (!place.elsewhere) {
+      const passed = passes(place.dist);
+      if (passed) place.elsewhere = { runs: 0, of: passed, typical: 0, longest: 0 };
+    }
+    const waited = place.runs + (place.elsewhere?.runs ?? 0);
+    const passed = place.of + (place.elsewhere?.of ?? 0);
+    // Likely on this route's own runs, or on every run that passed taken
+    // together. Runs the other way can add to a wait but not take one away:
+    // at a wide crossing each direction waits on its own side.
+    const enough = (n, of) => n >= 2 && n / of >= 0.5;
+    // With one or two runs in all there is nothing to judge by: a wait seen is a wait shown.
+    place.likely = passed < 3 ? waited > 0 : enough(place.runs, place.of) || enough(waited, passed);
+  }
+  return places.sort((a, b) => a.dist - b.dist);
 }
 
 /** Group the places each run stood into places along the route. */
@@ -427,15 +514,20 @@ function gatherWaits(route, perRun, options) {
  *   each `{kind, dist, ...}` with kind 'turn' | 'wait' | 'climb' | 'marker' | 'finish'.
  */
 export function buildGuide(recordings, options) {
-  return guideFromRuns(recordings.map((recording) => toFixes(recording)), options);
+  const others = (options?.others ?? []).map((recording) => toFixes(recording));
+  return guideFromRuns(recordings.map((recording) => toFixes(recording)), { ...options, others });
 }
 
 /**
  * buildGuide for runs already in hand as fixes, as an app keeps the runs it
  * recorded. The first run draws the route.
  * @param {Array<Array<{t:number, lat:number, lon:number, ele?:number}>>} all
+ * @param {object} [options] `others`: runs of other routes (the same streets
+ *   the other way, or a route that shares some of them), as fixes. Where one
+ *   of them stood still on ground this route covers, that counts towards
+ *   the wait there: a crossing is a crossing from either side.
  */
-export function guideFromRuns(all, options) {
+export function guideFromRuns(all, { others = [], ...options } = {}) {
   const o = { ...GUIDE_DEFAULTS, ...options };
   if (!all.length) throw new Error('A route guide needs at least one recording of the route');
   const route = buildRoute(all[0], options);
@@ -444,7 +536,7 @@ export function guideFromRuns(all, options) {
   const climb = elevationAlong(route, runs, options);
   const turns = agreedTurns(route, runs, options);
   const stood = runs.map((fixes) => standingIn(route, fixes, options));
-  const pausePoints = gatherWaits(route, stood, options);
+  const pausePoints = addElsewhere(gatherWaits(route, stood, options), standingElsewhere(route, others, options), runs.length, route.length, o);
   const usualWait = pausePoints.reduce((sum, p) => sum + p.share * p.typical, 0);
   const elapsed = runs.map((fixes) => fixes[fixes.length - 1].t);
   // Time on the move: the whole run less the waits found in it.
@@ -500,13 +592,15 @@ export function upcoming(guide, dist, { ahead = 400, kinds = null } = {}) {
 }
 
 const ACT_ON = ['turn', 'wait', 'climb', 'finish'];
+/** Worth a cue: everything to act on, but a wait only where one is likely. */
+const actOn = (f) => ACT_ON.includes(f.kind) && !(f.kind === 'wait' && f.likely === false);
 const PASSING = ['marker', 'water', 'toilets'];
 
 /**
  * The cue for a display to show someone `dist` metres along the route.
  *
- * `now` is the nearest thing ahead to act on: a turn, a place runs tend to
- * wait, the foot of a climb, or the finish. A distance marker takes its
+ * `now` is the nearest thing ahead to act on: a turn, a place where a wait
+ * is likely, the foot of a climb, or the finish. A distance marker takes its
  * place only when it is within `markerWithin` metres and there is nothing
  * to act on within `actWithin`: a turn 150 m off matters more than a marker.
  * A water point or toilets beside the route is mentioned the same way.
@@ -522,7 +616,7 @@ export function nextCue(guide, dist, { markerWithin = 150, actWithin = 200 } = {
   const all = upcoming(guide, dist, { ahead: Infinity });
   const climb = all.find((f) => f.kind === 'climb' && f.in === 0) ?? null;
   const ahead = all.filter((f) => f.in > 0);
-  const act = ahead.filter((f) => ACT_ON.includes(f.kind));
+  const act = ahead.filter(actOn);
   // Things worth a mention in passing: a distance marker, a water point, toilets.
   const marker = ahead.find((f) => PASSING.includes(f.kind) && f.in <= markerWithin);
   if (marker && (!act.length || act[0].in > actWithin)) return { now: marker, then: act[0] ?? null, climb };

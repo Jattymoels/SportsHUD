@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildRoute, buildGuide, groupRuns, elevationAlong, upsAndDowns, findTurns, agreedTurns, findPausePoints, distanceMarkers, upcoming, nextCue, amenityQuery, amenitiesAlong, withAmenities, parseGpx } from '../index.js';
+import { buildRoute, buildGuide, guideFromRuns, groupRuns, elevationAlong, upsAndDowns, findTurns, agreedTurns, findPausePoints, distanceMarkers, upcoming, nextCue, amenityQuery, amenitiesAlong, withAmenities, parseGpx } from '../index.js';
 import { SCENARIOS, terrain } from '../../fixtures/generate.mjs';
 import { path, steady, recording, noise, at } from './helpers.js';
 
@@ -395,4 +395,59 @@ test('the question put to the map service covers the route with room to spare', 
   near(west, corner.lon, 2e-5);
   near(north, far.lat, 2e-5);
   near(east, far.lon, 2e-5);
+});
+
+// --------------------------------------- waits, from either direction --
+
+test('a crossing is a crossing from either side: runs the other way count towards a wait', () => {
+  // Three runs out along the street. One waits at the 400 m crossing; one stops for a quarter of a minute at 700 m.
+  const out = [runWithStops(kilometre, [{ at: 400, seconds: 30 }]), runWithStops(kilometre, [{ at: 700, seconds: 15 }]), runWithStops(kilometre, [])];
+  // Two runs home, the other way. Both wait at the same crossing (600 m into their run), and one at a second crossing, 200 m along the way out.
+  const home = [...kilometre].reverse();
+  const back = [runWithStops(home, [{ at: 600, seconds: 40 }, { at: 800, seconds: 20 }]), runWithStops(home, [{ at: 600, seconds: 50 }])];
+  const alone = guideFromRuns(out);
+  const pooled = guideFromRuns(out, { others: back });
+  assert.equal(pooled.runs, 3, 'the runs home are not runs of this route');
+
+  // On its own: two places, each waited at once in three runs. Neither is likely.
+  assert.deepEqual(alone.pausePoints.map((p) => [Math.round(p.dist / 100) * 100, p.runs, p.likely]), [[400, 1, false], [700, 1, false]]);
+
+  // With the runs home: the crossing at 400 m was waited at by 3 of the 5 runs that passed it.
+  const crossing = pooled.pausePoints.find((p) => Math.abs(p.dist - 400) < 15);
+  assert.deepEqual([crossing.runs, crossing.of, crossing.elsewhere.runs, crossing.elsewhere.of, crossing.likely], [1, 3, 2, 2, true]);
+  near(crossing.elsewhere.typical, 43, 6);
+  // A place only the runs home waited at is listed too: once in five passes, so not likely.
+  const second = pooled.pausePoints.find((p) => Math.abs(p.dist - 200) < 15);
+  assert.deepEqual([second.runs, second.of, second.elsewhere.runs, second.elsewhere.of, second.likely], [0, 3, 1, 2, false]);
+  // The stop at 700 m: no run home stopped there, though both passed, which counts against it.
+  const brief = pooled.pausePoints.find((p) => Math.abs(p.dist - 700) < 15);
+  assert.deepEqual([brief.runs, brief.likely, brief.elsewhere.runs, brief.elsewhere.of], [1, false, 0, 2]);
+  // What to expect on this route still counts only this route's runs.
+  near(pooled.usualWait, alone.usualWait, 1e-9);
+
+  // Only a likely wait is cued.
+  assert.equal(nextCue(pooled, 300).now.kind, 'wait');
+  assert.equal(nextCue(pooled, 100).now.kind, 'wait', 'the cue from 100 m is the crossing at 400 m, not the unlikely stop at 200 m');
+  near(nextCue(pooled, 100).now.dist, 400, 15);
+  assert.equal(nextCue(alone, 300).now.kind, 'finish', 'on three runs alone, one wait in three is not cued');
+});
+
+test('runs the other way cannot take away a wait this route\'s own runs establish', () => {
+  // Two of three runs out wait at 400 m. The runs home pass the spot without stopping: they wait on their own side.
+  const out = [runWithStops(kilometre, [{ at: 400, seconds: 30 }]), runWithStops(kilometre, [{ at: 405, seconds: 50 }]), runWithStops(kilometre, [])];
+  const home = [...kilometre].reverse();
+  const back = [runWithStops(home, [{ at: 500, seconds: 40 }]), runWithStops(home, [{ at: 500, seconds: 45 }]), runWithStops(home, [])];
+  const guide = guideFromRuns(out, { others: back });
+  const crossing = guide.pausePoints.find((p) => Math.abs(p.dist - 400) < 15);
+  assert.deepEqual([crossing.runs, crossing.of, crossing.elsewhere.runs, crossing.elsewhere.of], [2, 3, 0, 3]);
+  assert.equal(crossing.likely, true, '2 of 6 in all, but 2 of 3 going this way');
+  // The far side, 100 m on, where the runs home wait: 2 of 6 in all and none this way, so not likely.
+  const farSide = guide.pausePoints.find((p) => Math.abs(p.dist - 500) < 15);
+  assert.deepEqual([farSide.runs, farSide.elsewhere.runs, farSide.likely], [0, 2, false]);
+});
+
+test('with one or two runs, a wait seen is a wait shown', () => {
+  const guide = guideFromRuns([runWithStops(kilometre, [{ at: 400, seconds: 30 }]), runWithStops(kilometre, [])]);
+  assert.deepEqual(guide.pausePoints.map((p) => p.likely), [true]);
+  assert.equal(nextCue(guide, 300).now.kind, 'wait');
 });

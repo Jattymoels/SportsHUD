@@ -103,7 +103,7 @@ function start(ghostRecording, runnerRecording) {
   const pathFirst = $('ghostMode').value === 'pace' ? [runnerRecording, ghostRecording] : [ghostRecording, runnerRecording];
   try {
     state.run.guide = buildGuide(pathFirst.filter(Boolean));
-    state.run.features = state.run.guide.features.filter((f) => ['turn', 'wait', 'climb'].includes(f.kind));
+    state.run.features = state.run.guide.features.filter((f) => ['turn', 'wait', 'climb'].includes(f.kind) && !(f.kind === 'wait' && f.likely === false));
   } catch {
     state.run.guide = null;
     state.run.features = [];

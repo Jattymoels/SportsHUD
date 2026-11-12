@@ -201,7 +201,10 @@ export function describe(feature) {
     return { title: feature.shape === 'sharp' ? `SHARP ${way}` : way, detail: '' };
   }
   if (feature.kind === 'wait') {
-    const often = feature.of > 1 ? `${feature.runs} of ${feature.of} runs waited` : 'waited here once';
+    // Every run that passed here counts, whichever way it was going.
+    const waited = feature.runs + (feature.elsewhere?.runs ?? 0);
+    const passed = feature.of + (feature.elsewhere?.of ?? 0);
+    const often = passed > 1 ? `${waited} of ${passed} runs waited` : 'waited here once';
     return { title: 'LIKELY WAIT', detail: `${often}, about ${wait(feature.typical)}` };
   }
   if (feature.kind === 'climb') return { title: 'CLIMB', detail: `${Math.round(feature.gain)} m up over ${metres(feature.length)}` };
@@ -237,7 +240,7 @@ export function drawPreview(ctx, guide, name) {
     const i = Math.min(route.cum.length - 1, indexAt(route, d));
     return toPx(route.x[i], route.y[i]);
   };
-  for (const p of guide.pausePoints) {
+  for (const p of guide.pausePoints.filter((point) => point.likely !== false)) {
     const [x, y] = place(p.dist);
     dot(ctx, x, y, 9, '#000');
     dot(ctx, x, y, 6, BEHIND);
@@ -257,11 +260,11 @@ export function drawPreview(ctx, guide, name) {
   text(ctx, 'km', 300 - 34 + wide / 2 + 12, 408, 40, { color: DIM, align: 'left' });
 
   // Three things to know, each with a caption.
-  const waits = guide.pausePoints.length;
+  const waits = guide.pausePoints.filter((point) => point.likely !== false).length;
   const facts = [
     guide.climb ? [`+${Math.round(guide.climb.gain)} m`, 'climb'] : ['–', 'no climb data'],
     [duration(guide.times.moving), guide.runs > 1 ? 'usual time' : 'last time'],
-    waits ? [`${waits} wait${waits === 1 ? '' : 's'}`, `about ${wait(guide.usualWait)}`] : ['0 waits', 'none on record'],
+    waits ? [`${waits} wait${waits === 1 ? '' : 's'}`, `about ${wait(guide.usualWait)}`] : ['0 waits', 'none likely'],
   ];
   facts.forEach(([value, caption], i) => {
     const x = 110 + i * 190;

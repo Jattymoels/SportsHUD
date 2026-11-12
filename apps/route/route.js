@@ -80,9 +80,11 @@ async function chooseFiles(input) {
   }
   state.own = routes.map((members) => {
     const runs = members.map((i) => recordings[i]);
+    // Runs of the other routes found: where they cover the same ground, their waits count too.
+    const others = recordings.filter((_, i) => !members.includes(i));
     const name = runs[0].name ?? 'Your route';
     const length = buildRoute(toFixes(runs[0])).length;
-    return { recordings: runs, name, label: `${name}: ${km(length, 1)}, ${plural(runs.length, 'run')}` };
+    return { recordings: runs, others, name, label: `${name}: ${km(length, 1)}, ${plural(runs.length, 'run')}` };
   });
   const select = $('pick');
   for (const option of [...select.options]) if (option.value.startsWith('own:')) option.remove();
@@ -94,13 +96,13 @@ async function chooseFiles(input) {
 
 function startOwn(k) {
   const route = state.own[k];
-  if (route) start(route.recordings, route.name);
+  if (route) start(route.recordings, route.name, route.others);
 }
 
-function start(recordings, name) {
+function start(recordings, name, others = []) {
   let guide;
   try {
-    guide = buildGuide(recordings);
+    guide = buildGuide(recordings, { others });
   } catch (error) {
     showMessage(error.message);
     return;
@@ -168,18 +170,18 @@ function renderSummary() {
   $('time').textContent = clock(g.times.moving);
   $('timeSub').textContent = `on the move; ${clock(g.times.elapsed)} with waits`;
   const places = g.pausePoints;
+  const likely = places.filter((p) => p.likely).length;
   $('waits').textContent = places.length ? `about ${wait(g.usualWait)}` : 'none';
-  const always = places.filter((p) => p.runs === p.of).length;
-  const everyRun = g.runs < 2 ? '' : always === places.length ? ', on every run' : always ? `, ${always} on every run` : ', none on every run';
-  $('waitsSub').textContent = places.length ? `at ${plural(places.length, 'place')}${everyRun}` : 'no run stood still for 5 s or more';
+  $('waitsSub').textContent = places.length ? `${likely} likely, of ${plural(places.length, 'place')} a run has waited at` : 'no run stood still for 5 s or more';
   const sharp = g.turns.filter((t) => t.shape !== 'turn').length;
   $('turns').textContent = String(g.turns.length);
   const agreed = g.runs >= 3 ? '; made on at least half the runs' : '';
   $('turnsSub').textContent = g.turns.length ? `${g.turns.filter((t) => t.side === 'left').length} left, ${g.turns.filter((t) => t.side === 'right').length} right${sharp ? `, ${sharp} sharp` : ''}${agreed}` : 'no corners of 45° or more';
+  const elsewhere = places.some((p) => p.elsewhere);
   $('caveat').textContent =
-    g.runs < 3
+    g.runs < 3 && !elsewhere
       ? `From ${plural(g.runs, 'run')}, a wait is only known to have happened, not how likely it is. More runs of the same route sharpen it.`
-      : 'A place counts as a likely wait by how many of the runs stood there.';
+      : `A wait is likely where at least two runs waited, and at least half of those that passed.${elsewhere ? ' Runs of your other routes count where they cover the same ground: a crossing is a crossing from either side.' : ''}`;
 }
 
 // ----------------------------------------------------------------- chart --
@@ -257,7 +259,7 @@ function buildChart() {
     svgEl('polyline', { class: 'height', points: points.join(' ') }, svg);
   }
   for (const turn of g.turns) svgEl('line', { class: 'turn', x1: x(turn.dist), x2: x(turn.dist), y1: floor - 7, y2: floor - 1 }, svg);
-  for (const place of g.pausePoints) svgEl('circle', { class: 'wait', cx: x(place.dist), cy: onLine(place.dist), r: 5 }, svg);
+  for (const place of g.pausePoints) svgEl('circle', { class: place.likely ? 'wait' : 'wait once', cx: x(place.dist), cy: onLine(place.dist), r: place.likely ? 5 : 4 }, svg);
   // Water (a ring) and toilets (a square), in a row across the top.
   for (const a of g.amenities ?? []) {
     if (a.kind === 'water') svgEl('circle', { class: 'amenity', cx: x(a.dist), cy: m.top - 9, r: 4.5 }, svg);
@@ -334,8 +336,9 @@ function inWords(f) {
     return { what: `${f.shape === 'sharp' ? 'Sharp ' : ''}${f.side} turn`.replace(/^./, (c) => c.toUpperCase()), detail: `${Math.round(f.angle)}°${f.of > 1 ? `; on ${f.runs} of ${f.of} runs` : ''}` };
   }
   if (f.kind === 'wait') {
-    const often = f.of > 1 ? `${f.runs} of ${f.of} runs waited` : 'the run waited';
-    return { what: 'Likely wait', detail: `${often}; usually ${wait(f.typical)}${f.runs > 1 ? `, at most ${wait(f.longest)}` : ''}` };
+    const often = f.of > 1 || f.elsewhere ? `${f.runs} of ${f.of} runs waited` : 'the run waited';
+    const too = f.elsewhere ? `, and ${f.elsewhere.runs} of ${f.elsewhere.of} on other routes past here` : '';
+    return { what: f.likely ? 'Likely wait' : 'A wait, once', detail: `${often}${too}; usually ${wait(f.typical)}${f.runs > 1 ? `, at most ${wait(f.longest)}` : ''}` };
   }
   if (f.kind === 'climb') return { what: 'Climb', detail: `${Math.round(f.gain)} m up over ${metres(f.length)}, ${(100 * f.grade).toFixed(1)}%` };
   if (f.kind === 'marker') return { what: `${f.label} marker`, detail: '' };

@@ -1,6 +1,6 @@
 // Turn OpenStreetMap data into a course file the golf app can load.
 //
-//   node tools/osm-course.mjs map.json fixtures/courses/name.json [--name=Grange]
+//   node tools/osm-course.mjs map.json fixtures/courses/name.json [--name=Grange] [--title="What to call it"]
 //
 // map.json is what OpenStreetMap's map call returns for the area of the
 // course, for example
@@ -15,12 +15,15 @@ import { courseFromOsm } from '../engine/index.js';
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const name = process.argv.find((a) => a.startsWith('--name='))?.slice(7);
+// What the golfer calls it, where the map's own name is not that: one course of a club with two, say.
+const title = process.argv.find((a) => a.startsWith('--title='))?.slice(8);
 if (args.length < 2) {
   console.error('Usage: node tools/osm-course.mjs map.json out.json [--name=Part of the course name]');
   process.exit(1);
 }
 const osm = JSON.parse(readFileSync(args[0], 'utf8'));
 const course = courseFromOsm(osm, { name });
+if (title) course.title = title;
 course.source = 'OpenStreetMap';
 course.fetched = new Date().toISOString().slice(0, 10);
 mkdirSync(dirname(args[1]), { recursive: true });

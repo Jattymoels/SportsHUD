@@ -17,7 +17,7 @@ A first version of every build in the spec, at the desk: the track engine, the g
 | `apps/probe/` | The anchoring probe: the route, its markers and the ghost placed over a phone's camera picture, using only GPS and the compass. The nearest thing to glasses that place things in the world, and a first measure of how far off the placing is. |
 | `apps/preview/` | Through the glasses: a recorded run from the runner's eyes, with the ghost and distance markers placed in the world along the route. A preview of where the product is heading, with a switch to the heads-up square that today's display can show. Desk tool. |
 | `apps/route/` | The route guide, as far as past runs alone can take it: the route's length, climb, turns and usual waiting places, as a pre-start screen and as cues on the way. No map data yet, so no water or toilets. |
-| `apps/golf/` | The golf display: distances to the green, where the chosen club lands the ball in the wind, look to range, and hiding at address. On the 18 holes of the Grange that OpenStreetMap has mapped, or a made-up hole. Sliders at the desk; the phone's GPS, compass and tilt on the course. |
+| `apps/golf/` | The golf display: distances to the green, where the chosen club lands the ball in the wind, look to range, and hiding at address. On the Grange's East Course as OpenStreetMap has it mapped, or a made-up hole. Sliders at the desk; the phone's GPS, compass and tilt on the course. |
 | `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to any kind of ghost. |
 | `fixtures/courses/` | Golf courses built from OpenStreetMap by `tools/osm-course.mjs`. |
 | `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. One pair is two different runs that share 800 m of road, for live segments. |
@@ -192,10 +192,10 @@ OpenStreetMap draws a course as separate things: an outline, a line of play for 
 `fixtures/courses/grange.json` is the Grange Golf Club, Adelaide, built this way:
 
 ```bash
-node tools/osm-course.mjs map.json fixtures/courses/grange.json --name=Grange
+node tools/osm-course.mjs map.json fixtures/courses/grange.json --name=Grange --title="The Grange, East Course"
 ```
 
-where `map.json` is OpenStreetMap's map call for the area of the course. What the map holds there, as of 12 November 2026: a line of play, par and stroke index for 18 of the club's 36 holes (par 72, 6,379 m, on the east side of the property), every one with its green, a pin, tees, fairway and bunkers; and for the other 18, greens and bunkers but no lines of play, so they cannot be used yet. In all, 37 greens, 66 tees, 41 fairways, 123 bunkers and 3 water hazards. None of it has been checked against the ground, and a mapped pin is where the mapper put it, not today's hole.
+where `map.json` is OpenStreetMap's map call for the area of the course. What the map holds there, as of 12 November 2026: a line of play, par and stroke index for the 18 holes of the East Course (par 72, 6,379 m), every one with its green, a pin, tees, fairway and bunkers; and for the West Course, greens and bunkers but no lines of play, so it cannot be used yet. In all, 37 greens, 66 tees, 41 fairways, 123 bunkers and 3 water hazards. None of it has been checked against the ground, and a mapped pin is where the mapper put it, not today's hole.
 
 The course file is derived from OpenStreetMap, © OpenStreetMap contributors, and is available under the Open Database Licence (ODbL) like its source.
 
@@ -212,7 +212,7 @@ The course file is derived from OpenStreetMap, © OpenStreetMap contributors, an
 
 - **The wind** is a slider, or "Get the wind at the course now", which asks Open-Meteo, a public forecast service, telling it where the course is to the nearest kilometre or so and never where you are. It is a forecast for the area at 10 m up, not a reading on the course. Run so far against a stand-in for the service only.
 
-Not built yet: the other 18 holes. B7 and B9 are ready to test on the course but untested.
+Not built yet: the West Course. B7 and B9 are ready to test on the East Course but untested.
 
 ## Deployment
 

@@ -138,7 +138,7 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 | Working name | SportsHUD, a placeholder; also the GitHub repository name |
 | First sport | Running |
 | Field-test phone | Android |
-| Golf test course | Grange. Chosen 2026-11-12. OpenStreetMap has 18 of its 36 holes mapped with lines of play, on the east side of the property |
+| Golf test course | Grange, East Course. Chosen 2026-11-12. OpenStreetMap has the East Course's 18 holes mapped with lines of play; the West Course has none |
 | Rangefinder for B7 | Available |
 | Direction | The ghost and the route's markers are to be placed in the world in front of the runner, like a time-trial ghost in a racing game showing a personal best, with distance markers coming up along the route. A heads-up panel of numbers is what competitors already show. Today's Ray-Ban Display cannot place things in the world, so this does not have to work on current hardware; `apps/preview/` shows what it would look like. Stated 2026-11-12 |
 | Clock | Everyday runs: paused time does not count, as on a watch. Races: the clock never stops. The engine does both; everyday is the default. Agreed 2026-11-11 |
@@ -151,11 +151,12 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 - [x] Two GPX recordings of the same running route, for B1. Supplied 2026-11-11; B1 passes on them at the desk.
 - [x] The pace ghost: which pace? Answered 2026-11-11; see "Pace ghost" above. A set pace and live segments are both built at the desk.
 - [ ] A recording of a run that shares only part of the commute route, to try live segments on real ground. So far it has been tried on a made-up run, and on the two commute runs with one cut down to its middle.
-- [ ] What distance and elevation gain does the watch or Strava show for the two test runs? Needed to check the distance target in B11 and the route guide's climb figure.
+- [x] What distance does Strava show for the test runs? 12 km. Given 2026-11-12; the five runs measure 12.04 to 12.08 km, within 1%.
+- [ ] What elevation gain does Strava show for them? Needed to check the route guide's climb figure, which is 61 m to work.
 - [ ] More recordings of the commute route. The route guide's "likely waits" need several runs to say how likely each is; two only show that a wait happened.
 - [x] Grange or West Beach? Grange, chosen 2026-11-12. Mapped in OpenStreetMap for 18 of 36 holes: enough for B7 and B9.
 - [x] Approximate carry distance for each club. Given 2026-11-12, ten clubs from driver (240 m) to a 52° wedge (100 m).
-- [ ] Which of the Grange's two courses are the 18 mapped holes? They sit on the east side; the first nine run par 4, 4, 3, 4, 3, 4, 5, 4, 5.
+- [x] Which of the Grange's two courses are the 18 mapped holes? The East Course. Confirmed 2026-11-12.
 - [ ] Are the proposed pass targets right, especially B3 and B4?
 - [ ] What is the budget and route for importing display glasses for Checkpoint 2?
 - [ ] Does Australia count as a supported country for Meta's Wearables Developer Center? Meta says full access is limited to supported countries.

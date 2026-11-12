@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   bearingTo, distanceTo, turnBetween, pointAlong, centreOf, inside, greenDistances,
   carryInWind, landingZone, clubFor, zoneTouches, hazardsInPlay, lookTarget, lookAround, featuresOf,
-  createAddressHider, DEFAULT_CLUBS, WIND_MODEL,
+  createAddressHider, scoreDistances, scoreLooks, DEFAULT_CLUBS, WIND_MODEL,
 } from '../index.js';
 import { HOLE, LAYOUT, at } from '../../fixtures/golf.mjs';
 
@@ -206,4 +206,30 @@ test('B10: a glance at your feet does not hide the display', () => {
   assert.equal(hider.update(-45, 1.2), false);
   assert.equal(hider.update(-10, 1.25), false);
   assert.equal(hider.update(-10, 3), false);
+});
+
+// --------------------------------------------------------- course checks --
+
+test('B7 scoring: within 5 m on 9 of 10 readings', () => {
+  const reading = (app, measured) => ({ app, measured });
+  // Nine within 5 m and one 8 m out: a pass.
+  const nine = [...Array.from({ length: 9 }, (_, i) => reading(150 + i, 152 + i)), reading(120, 128)];
+  const score = scoreDistances(nine);
+  assert.deepEqual([score.count, score.good, score.pass], [10, 9, true]);
+  near(score.worst, 8, 1e-9);
+  near(score.typical, 2, 1e-9);
+  // Two out: a fail.
+  assert.equal(scoreDistances([...nine.slice(0, 8), reading(100, 107), reading(120, 128)]).pass, false);
+  // Fewer than ten readings: not yet a result either way.
+  assert.equal(scoreDistances(nine.slice(0, 6)).pass, null);
+  assert.deepEqual(scoreDistances([]), { count: 0, good: 0, worst: 0, typical: 0, pass: null });
+  // Exactly 5 m out still counts.
+  assert.equal(scoreDistances([reading(100, 105)]).good, 1);
+});
+
+test('B9 scoring: the right feature in 8 of 10 looks', () => {
+  const looks = (right, wrong) => [...Array(right).fill({ right: true }), ...Array(wrong).fill({ right: false })];
+  assert.deepEqual(scoreLooks(looks(8, 2)), { count: 10, right: 8, pass: true });
+  assert.equal(scoreLooks(looks(7, 3)).pass, false);
+  assert.equal(scoreLooks(looks(5, 0)).pass, null);
 });

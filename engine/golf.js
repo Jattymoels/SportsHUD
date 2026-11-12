@@ -344,3 +344,40 @@ export function createAddressHider(options) {
     },
   };
 }
+
+// ------------------------------------------------------- course checks --
+
+/**
+ * Score distance checks against a rangefinder or a course marker (B7).
+ *
+ * @param {Array<{app:number, measured:number}>} readings metres: what the
+ *   app said, and what the rangefinder or marker said
+ * @param {{within?:number, share?:number, least?:number}} [target] a
+ *   reading is good within `within` metres; the check passes when `share`
+ *   of at least `least` readings are good
+ * @returns {{count:number, good:number, worst:number, typical:number, pass:boolean|null}}
+ *   worst and typical: the largest and the median difference, metres. pass
+ *   is null until there are `least` readings.
+ */
+export function scoreDistances(readings, { within = 5, share = 0.9, least = 10 } = {}) {
+  const off = readings.map((r) => Math.abs(r.app - r.measured)).sort((a, b) => a - b);
+  const good = off.filter((d) => d <= within).length;
+  return {
+    count: off.length,
+    good,
+    worst: off.length ? off[off.length - 1] : 0,
+    typical: off.length ? off[(off.length - 1) >> 1] : 0,
+    pass: off.length >= least ? good / off.length >= share : null,
+  };
+}
+
+/**
+ * Score look-to-range checks (B9): was the feature named the one being
+ * looked at?
+ * @param {Array<{right:boolean}>} looks
+ * @returns {{count:number, right:number, pass:boolean|null}} pass is null until there are `least` looks
+ */
+export function scoreLooks(looks, { share = 0.8, least = 10 } = {}) {
+  const right = looks.filter((l) => l.right).length;
+  return { count: looks.length, right, pass: looks.length >= least ? right / looks.length >= share : null };
+}

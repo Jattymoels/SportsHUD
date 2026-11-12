@@ -202,7 +202,9 @@ The course file is derived from OpenStreetMap, © OpenStreetMap contributors, an
 - **On the course,** tick "Use this phone's position" and the hole is found from where you stand. Tick "Use this phone's compass and tilt" and hold the phone up like a viewfinder: facing sets look to range, and tipping it down hides the display as at address. Your position stays in the browser.
 - **The bag** is the set of carry distances entered for it, editable on the page and kept on the device. When the green is out of reach the club offered is the longest whose landing zone stays out of trouble (the driver only from the tee); otherwise the one nearest the distance, or a part shot inside the shortest club.
 
-Not built yet: wind from a forecast (it is a slider), the other 18 holes, and any check against a rangefinder. So B7 and B9 are ready to test on the course but untested.
+- **The course test** logs what a rangefinder or a course marker says beside what the app says, and keeps the tally against the targets: within 5 m on 9 of 10 readings for green distances (B7), the right feature 8 times in 10 for look to range (B9). A laser reads to the flag, wherever the hole is cut that day, so "I am at today's pin" takes where you stand as the pin for the rest of the day. The log stays on the device and downloads as CSV.
+
+Not built yet: wind from a forecast (it is a slider), and the other 18 holes. B7 and B9 are ready to test on the course but untested.
 
 ## Deployment
 

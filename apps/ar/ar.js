@@ -21,6 +21,7 @@ import { liveSource, demoSource } from '../ghost/sources.js';
 const RAD = Math.PI / 180;
 const EYES_APART = 0.063; // metres between a pair of eyes, near enough
 const LOG_LIMIT = 3600; // seconds of sensor readings kept at most
+const HOLD = 2000; // milliseconds two fingers must stay down to stop wearing, when touches are otherwise ignored
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const wrap = (degrees) => ((degrees % 360) + 360) % 360;
@@ -44,7 +45,10 @@ const state = {
   worn: false,
   lastFix: null,
   gpsError: null,
-  log: null, // { began, rows } while the sensors are being recorded
+  log: null, // { began, rows, written } once the sensors have been recorded in this visit
+  kept: 0, // readings from an earlier visit still held in the browser's storage
+  test: null, // { began } during a head test: recording only, no route and nothing drawn
+  hold: null, // when two fingers went down, while touches are otherwise ignored
 };
 
 function parsePace(text) {
@@ -96,7 +100,7 @@ function setCourse() {
 function onFix(fix) {
   state.gpsError = null;
   state.lastFix = { ...fix, at: performance.now() };
-  record('g', [fix.lat, 6], [fix.lon, 6], [fix.accuracy, 1]);
+  record('g', [fix.lat, 6], [fix.lon, 6], [fix.accuracy, 1], [fix.gpsHeading, 1], [fix.gpsSpeed, 2], [fix.altitude, 1], [fix.stamp ? Date.now() - fix.stamp : null, 0]);
   if (!state.course) return;
   if (state.session) state.session.update({ ...fix, t: fix.t ?? state.source.elapsed() });
   else state.tracker.update({ ...fix, t: seconds() });
@@ -225,8 +229,7 @@ function startGhost() {
   if (!state.demo && state.lastFix && performance.now() - state.lastFix.at < 3000) {
     state.session.update({ lat: state.lastFix.lat, lon: state.lastFix.lon, accuracy: state.lastFix.accuracy, t: 0 });
   }
-  if ($('record').checked) state.log = { began: seconds(), rows: ['# kind,seconds,then by kind: o alpha,beta,gamma,absolute | m ax,ay,az (gravity included, m/s2),turn rates alpha,beta,gamma (deg/s) | g lat,lon,accuracy | h heading shown,offset taken off,route bearing,metres along,speed,ghost lead'] };
-  $('saveLog').disabled = !state.log;
+  if ($('record').checked) beginLog('ghost run');
   $('go').textContent = 'Stop the ghost';
   keepAwake();
 }
@@ -234,28 +237,159 @@ function startGhost() {
 function stopGhost() {
   wakeLock?.release().catch(() => {});
   setCourse();
+  keepLog();
+  showLog();
 }
 
 // -------------------------------------------------------------- recording --
 
-/** One line of the sensor recording: a kind, then values each with the decimal places worth keeping. */
+// What the motion sensors and GPS report, written down as it arrives, to
+// test the heading work against a real head. It is kept in the page and,
+// every few seconds, copied into the browser's storage, so that a reload or
+// a dropped tab part-way through a run loses a few seconds and not the run.
+
+const HEADER = '# kind,seconds,then by kind: o alpha,beta,gamma,absolute | m ax,ay,az (gravity included, m/s2),turn rates alpha,beta,gamma (deg/s) | g lat,lon,accuracy,heading by GPS,speed by GPS,altitude,age of fix (ms) | h heading shown,offset taken off,route bearing,metres along,speed,ghost lead';
+
+/** Start writing down, or carry on from where an earlier start in this visit left off. */
+function beginLog(why) {
+  state.log ??= { began: seconds(), rows: [HEADER], written: 0 };
+  state.log.rows.push(`# ${why} started ${new Date().toISOString()} on ${navigator.userAgent}`);
+  showLog();
+}
+
+/** One line of the recording: a kind, then values each with the decimal places worth keeping. */
 function record(kind, ...values) {
   const log = state.log;
-  if (!log || !state.session) return;
+  if (!log || !(state.session || state.test)) return;
   const t = seconds() - log.began;
   if (t > LOG_LIMIT) return;
   log.rows.push(`${kind},${t.toFixed(3)},${values.map(([v, places]) => (v == null || Number.isNaN(v) ? '' : Number(v).toFixed(places))).join(',')}`);
 }
 
-function saveLog() {
-  if (!state.log) return;
-  const url = URL.createObjectURL(new Blob([state.log.rows.join('\n') + '\n'], { type: 'text/csv' }));
+/** The browser's own store for the recording: one entry for each few seconds written down. */
+let opened = null;
+async function store(mode) {
+  opened ??= new Promise((resolve, reject) => {
+    const open = indexedDB.open('sportshud-head', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('rows', { autoIncrement: true });
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => resolve(open.result);
+  });
+  return (await opened).transaction('rows', mode).objectStore('rows');
+}
+const done = (request) => new Promise((resolve, reject) => {
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error);
+});
+
+/** Copy what has been written down since last time into the browser's storage. */
+async function keepLog() {
+  const log = state.log;
+  if (!log || log.written >= log.rows.length) return;
+  const fresh = log.rows.slice(log.written);
+  try {
+    await done((await store('readwrite')).add(fresh.join('\n')));
+    log.written += fresh.length;
+  } catch {
+    // No storage here: the recording lives in the page alone, and a reload would lose it.
+  }
+}
+
+/** Everything written down: this visit's, or failing that what an earlier visit left in storage. */
+async function wholeLog() {
+  await keepLog();
+  try {
+    const parts = await done((await store('readonly')).getAll());
+    if (parts.length) return parts.join('\n') + '\n';
+  } catch {
+    // Fall through to what the page holds.
+  }
+  return state.log ? state.log.rows.join('\n') + '\n' : '';
+}
+
+async function saveLog() {
+  const text = await wholeLog();
+  if (!text) return;
+  // Squeezed where the browser can: a ten-minute run is a few megabytes otherwise.
+  let blob = new Blob([text], { type: 'text/csv' });
+  let name = `sportshud-head-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.csv`;
+  if (window.CompressionStream) {
+    blob = await new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob();
+    name += '.gz';
+  }
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `sportshud-head-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.csv`;
+  link.download = name;
   link.click();
   URL.revokeObjectURL(url);
 }
+
+async function clearLog() {
+  if (state.session || state.test) return;
+  state.log = null;
+  state.kept = 0;
+  try {
+    await done((await store('readwrite')).clear());
+  } catch {
+    // Nothing was stored.
+  }
+  showLog();
+}
+
+function showLog() {
+  const readings = state.log ? state.log.rows.filter((row) => row[0] !== '#').length : state.kept;
+  const busy = Boolean(state.session || state.test);
+  $('saveLog').disabled = !readings;
+  $('clearLog').disabled = !readings || busy;
+  $('test').disabled = Boolean(state.session);
+  const note = !readings ? '' : state.log ? `${readings.toLocaleString()} readings written down${busy ? ' so far' : ''}.` : 'A recording from an earlier visit is kept here. Download it; a new one would be added to the end of it.';
+  if ($('logNote').textContent !== note) $('logNote').textContent = note;
+}
+
+/** A head test: record and nothing else, with the screen dark and deaf to touches until two fingers hold it. */
+async function startTest(why = 'head test') {
+  if (state.session || state.test) return;
+  await askForSensors();
+  if (!state.source) openSource();
+  beginLog(why);
+  state.test = { began: seconds() };
+  stillTesting();
+  wear(true);
+  showLog();
+}
+
+function endTest() {
+  if (!state.test) return;
+  state.test = null;
+  stillTesting();
+  keepLog();
+  wear(false);
+  showLog();
+}
+
+// A note of when a head test was last seen running. If the page comes back
+// within a few minutes of one, the browser dropped it mid-run with nobody
+// able to see: it carries on by itself.
+const TESTING_KEY = 'sportshud.headtest';
+function stillTesting() {
+  try {
+    if (state.test) localStorage.setItem(TESTING_KEY, String(Date.now()));
+    else localStorage.removeItem(TESTING_KEY);
+  } catch {
+    // No storage: a dropped page then has to be started again by hand.
+  }
+}
+function wasTesting() {
+  try {
+    return Date.now() - Number(localStorage.getItem(TESTING_KEY)) < 3 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+/** Touches are ignored while worn if asked, and always during a head test: a strap or a wet forehead taps too. */
+const guarded = () => state.worn && (Boolean(state.test) || state.settings.guard);
 
 // ---------------------------------------------------------------- drawing --
 
@@ -279,6 +413,29 @@ function frame() {
   }
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
+  if (state.test) {
+    // Nobody is looking at it: a few dim words for whoever picks it up.
+    const holding = state.hold ? Math.min(1, (performance.now() - state.hold) / HOLD) : 0;
+    ctx.fillStyle = '#555';
+    ctx.textAlign = 'center';
+    ctx.font = `500 ${22 * scale}px system-ui, sans-serif`;
+    ctx.fillText(`Head test · ${clock(seconds() - state.test.began)} · ${(state.log.rows.length - 1).toLocaleString()} readings`, W / 2, H / 2 - 16 * scale);
+    ctx.font = `400 ${15 * scale}px system-ui, sans-serif`;
+    ctx.fillText(state.gpsError ?? (state.lastFix ? `GPS good to ${Math.round(state.lastFix.accuracy)} m` : 'Waiting for GPS…') + (state.axes ? '' : ' · no motion readings yet'), W / 2, H / 2 + 14 * scale);
+    ctx.fillText(holding ? 'Keep holding…' : 'To finish: hold two fingers here for two seconds', W / 2, H / 2 + 40 * scale);
+    if (holding) ctx.fillRect(W * 0.3, H / 2 + 54 * scale, W * 0.4 * holding, 4 * scale);
+    if (holding >= 1) {
+      state.hold = null;
+      endTest();
+    }
+    notice(null);
+    requestAnimationFrame(frame);
+    return;
+  }
+  if (state.hold && performance.now() - state.hold >= HOLD) {
+    state.hold = null;
+    wear(false);
+  }
   const here = state.course && position();
   if (!state.course) notice('Choose a route, or add a GPX of a past run.');
   else if (!here) notice(state.gpsError ?? 'Waiting for GPS…');
@@ -348,7 +505,7 @@ function showStatus(here) {
   if (here) parts.push(`${Math.round(here.dist)} m along the route.`);
   const r = here?.reading;
   if (r) parts.push(Math.abs(r.timeGap) < 0.5 ? 'Level with the ghost.' : `${Math.round(Math.abs(r.timeGap))} s ${r.timeGap > 0 ? 'ahead of' : 'behind'} the ghost.`);
-  if (state.log) parts.push(`Recording: ${(state.log.rows.length - 1).toLocaleString()} readings.`);
+  if (state.log && state.session) parts.push(`Recording: ${(state.log.rows.length - 1).toLocaleString()} readings.`);
   const text = parts.join(' ');
   if ($('status').textContent !== text) $('status').textContent = text;
 }
@@ -369,14 +526,15 @@ function set(name, value) {
     $('layout').value = value;
     $('spreadBox').hidden = value !== 'pair';
   }
-  if (name === 'mirror' || name === 'upturn') $(name).checked = value;
+  if (name === 'mirror' || name === 'upturn' || name === 'guard') $(name).checked = Boolean(value);
   saveSettings('ar', state.settings);
 }
 
 async function wear(on) {
   state.worn = on;
+  state.hold = null;
   document.body.classList.toggle('worn', on);
-  $('leave').hidden = !on;
+  $('leave').hidden = !on || guarded();
   if (on) {
     await askForSensors();
     keepAwake();
@@ -434,10 +592,23 @@ async function init() {
   if (params.get('ghost') === 'pace') $('ghostKind').value = 'pace';
   if (parsePace(params.get('pace') ?? '')) $('ghostPace').value = params.get('pace');
   for (const name of Object.keys(RANGES)) set(name, state.settings[name]);
-  for (const name of ['layout', 'mirror', 'upturn']) set(name, state.settings[name]);
+  for (const name of ['layout', 'mirror', 'upturn', 'guard']) set(name, state.settings[name]);
   listRuns();
   setCourse();
   openLink();
+  // A recording left by an earlier visit, a reload part-way through a run say, is still there to download.
+  try {
+    state.kept = (await done((await store('readonly')).getAll())).reduce((sum, part) => sum + part.split('\n').filter((row) => row[0] !== '#').length, 0);
+  } catch {
+    state.kept = 0;
+  }
+  showLog();
+  setInterval(() => {
+    keepLog();
+    showLog();
+    if (state.test) stillTesting();
+  }, 5000);
+  if (wasTesting()) startTest('head test carried on after the page was dropped');
 
   $('wear').addEventListener('click', () => wear(true));
   $('leave').addEventListener('click', () => wear(false));
@@ -448,12 +619,16 @@ async function init() {
   $('import').addEventListener('change', (event) => importGpx(event.target));
   for (const name of Object.keys(RANGES)) $(name).addEventListener('input', (event) => set(name, Number(event.target.value)));
   $('layout').addEventListener('change', (event) => set('layout', event.target.value));
-  for (const name of ['mirror', 'upturn']) $(name).addEventListener('change', (event) => set(name, event.target.checked));
+  for (const name of ['mirror', 'upturn', 'guard']) $(name).addEventListener('change', (event) => set(name, event.target.checked));
   $('saveLog').addEventListener('click', saveLog);
+  $('clearLog').addEventListener('click', clearLog);
+  $('test').addEventListener('click', () => startTest());
   window.addEventListener('hashchange', openLink);
   document.addEventListener('fullscreenchange', () => {
-    if (!document.fullscreenElement && state.worn) wear(false);
+    // Leaving full screen stops the wearing, except in a head test, which only two fingers end.
+    if (!document.fullscreenElement && state.worn && !state.test) wear(false);
   });
+  window.addEventListener('pagehide', keepLog);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && (state.session || state.worn)) keepAwake();
   });
@@ -465,6 +640,7 @@ async function init() {
   // Five keys, as glasses or a small remote have: Enter lines up, the arrows nudge the picture.
   document.addEventListener('keydown', (event) => {
     if (event.target.closest('#controls') && !state.worn) return;
+    if (state.test) return;
     const nudge = { ArrowLeft: ['trim', -1], ArrowRight: ['trim', 1], ArrowUp: ['lift', 1], ArrowDown: ['lift', -1] }[event.key];
     if (event.key === 'Enter') lineUp();
     else if (nudge) set(nudge[0], state.settings[nudge[0]] + nudge[1]);
@@ -473,10 +649,23 @@ async function init() {
   });
   // A tap lines up. With no sensors, a drag turns the head instead.
   let down = null;
+  const fingers = new Set();
+  const lifted = (event) => {
+    fingers.delete(event.pointerId);
+    state.hold = null;
+  };
   canvas.addEventListener('pointerdown', (event) => {
+    fingers.add(event.pointerId);
+    if (guarded()) {
+      // Deaf to touches, but for two fingers held down.
+      state.hold = fingers.size === 2 ? performance.now() : null;
+      return;
+    }
     down = { x: event.clientX, y: event.clientY, look: state.look, moved: false };
     canvas.setPointerCapture(event.pointerId);
   });
+  canvas.addEventListener('pointerup', lifted);
+  canvas.addEventListener('pointercancel', lifted);
   canvas.addEventListener('pointermove', (event) => {
     if (!down) return;
     if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > 12) down.moved = true;

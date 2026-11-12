@@ -100,8 +100,8 @@ The engine, the AR page, and the numbers above.
 
 **Question:** do the heading numbers hold on a real running head?
 
-- Fix a phone to the head: a headband or cap mount, or a visor.
-- Open `apps/ar/`, tick "Record", line up, and run a known route.
+- Fix a phone to the head, firmly: a head strap with a phone clamp, or tight under a headband.
+- Open `apps/ar/` and tap "Start a head test". It needs no route. Run for ten minutes round a few corners, then a minute looking to one side.
 - Send the recording back.
 
 This gives the first real data for the heading work and the stride idea, and with a visor a first look at a ghost on a road. It is ugly, and that does not matter.

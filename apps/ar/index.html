@@ -69,10 +69,28 @@
       </fieldset>
 
       <fieldset>
-        <legend>Recording the sensors</legend>
-        <label class="check"><input type="checkbox" id="record"> Record what the motion sensors and GPS report while the ghost runs</label>
-        <button id="saveLog" type="button" disabled>Download the recording</button>
-        <p class="note">The recording stays on this device until you send it somewhere. It holds where you went. It is what the heading work needs to be tested against a real head.</p>
+        <legend>A head test: recording the sensors</legend>
+        <p class="note">This is how the heading work gets tested against a real head. It needs no route and shows nothing: it only writes down what the motion sensors and GPS report while you run.</p>
+        <button id="test" type="button">Start a head test</button>
+        <label class="check"><input type="checkbox" id="record"> Record while the ghost runs, too</label>
+        <label class="check"><input type="checkbox" id="guard"> Ignore touches while worn, for a phone strapped on (press and hold with two fingers for two seconds to stop wearing)</label>
+        <div class="row">
+          <button id="saveLog" type="button" disabled>Download the recording</button>
+          <button id="clearLog" type="button" disabled>Delete it</button>
+        </div>
+        <p id="logNote" class="note" role="status"></p>
+        <details>
+          <summary>How to do a head test</summary>
+          <ol>
+            <li>Fix the phone firmly to your head, screen outwards: a head strap with a phone clamp, or tight under a headband. It must not wobble. Which way round does not matter.</li>
+            <li>Before putting it on, tap "Start a head test" and allow location and motion. The screen goes dark and ignores touches.</li>
+            <li>Stand still for ten seconds, facing the way you will set off.</li>
+            <li>Run for about ten minutes, anywhere: a few corners, and one straight of 200 m or more. Look where you are going, as you normally would.</li>
+            <li>Then, on a straight, run for a minute looking well to one side, as if at someone beside you.</li>
+            <li>Stop and stand still for ten seconds. Take it off, then press and hold the screen with two fingers for two seconds.</li>
+            <li>Tap "Download the recording" and send the file. It holds where you ran, and stays on the phone until you send it. If the browser drops the page part-way, what was written is kept, and the test carries on by itself when the page comes back.</li>
+          </ol>
+        </details>
       </fieldset>
 
       <details open>

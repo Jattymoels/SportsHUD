@@ -164,7 +164,9 @@ function routeGuide(run) {
     const all = state.runs.map(fixesOf);
     const mine = state.runs.indexOf(run);
     const same = groupFixes(all).find((members) => members.includes(mine)) ?? [mine];
-    return guideFromRuns([all[mine], ...same.filter((i) => i !== mine).map((i) => all[i])]);
+    // Saved runs of other routes count too, where they cover the same ground.
+    const others = all.filter((_, i) => !same.includes(i));
+    return guideFromRuns([all[mine], ...same.filter((i) => i !== mine).map((i) => all[i])], { others });
   } catch {
     return null; // the race goes ahead without cues
   }
@@ -370,7 +372,7 @@ function draw() {
     }
     const guide = state.ghost.guide;
     if (guide) {
-      const waits = guide.pausePoints.length;
+      const waits = guide.pausePoints.filter((p) => p.likely).length;
       const waiting = waits ? `${waits} likely wait${waits === 1 ? '' : 's'}, about ${wait(guide.usualWait)}` : 'no waits on record';
       lines.push({ text: `${km(guide.length)} km · ${waiting}`, tone: 'dim', size: 24 });
     }

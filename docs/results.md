@@ -27,7 +27,7 @@ Two behaviours were added on 2026-11-11 for the pace ghost. Their targets are pr
 ## What this means for the design so far
 
 - **Racing a recording only works as live segments.** One of three real runs of the same commute took other streets for a kilometre and a half. A plain recorded ghost swung to 14 minutes behind and jumped back 226 s. With a pace ghost standing in off the route, the largest change in any second was 2.1 s. The phone app now always races a saved run this way.
-- **Past runs are a usable route guide without a map.** Three runs of one route gave its climb, 15 turns that at least two runs agree on, and the three crossings where most runs wait. Two runs were not enough to call a wait likely.
+- **Past runs are a usable route guide without a map.** Three runs of one route gave its climb and 15 turns that at least two runs agree on. Two runs were not enough to call a wait likely; five runs of a commute, three out and two home, pick out four likely waits each way from ten or more places a run has stopped at once.
 - **Free map data is uneven, as expected.** OpenStreetMap has lines of play for 18 of the Grange's 36 holes, and no water or toilets at all in the surrounding square. B6's 80% target may not be reachable on map data alone.
 - **Today's display cannot do the thing the product is aiming at.** A ghost and markers placed in the world need glasses that know where the road is. The through-the-glasses preview shows the aim; the heads-up square is what a Ray-Ban Display could show now.
 

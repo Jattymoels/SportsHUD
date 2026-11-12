@@ -159,7 +159,7 @@ Past runs of a route say a good deal about it without any map. `buildGuide` in `
 
 - **Climb.** From the elevation a watch saves with each point. Readings from every run are averaged along the route and smoothed over 100 m. A rise or fall only counts once it reaches 2 m between turning points, because adding up every small step over-counts climb the same way adding up every GPS fix over-counts distance. A climb is called out where the ground rises at 2% or more and gains at least 8 m.
 - **Turns.** Where the direction of the route changes by 45° or more, taken over 20 m either side so that a gentle bend and the wobble of a GPS line do not count. Each has a side, an angle, and whether it is sharp or doubles back.
-- **Likely waits.** Where a run stood still for 5 seconds or more, or the watch paused itself. Waits on different runs within 40 m are the same place, and each place records how many of the runs waited there and for how long. On a city route these are mostly traffic lights. A run that goes round by another street is not waiting, though its progress along the route stands still meanwhile: a wait has to be standing on the ground, within 40 m. Two runs only show that a wait happened; it takes more runs of the same route to say how likely one is.
+- **Likely waits.** Where a run stood still for 5 seconds or more, or the watch paused itself. Waits on different runs within 40 m are the same place, and each place records how many of the runs waited there and for how long. On a city route these are mostly traffic lights. A run that goes round by another street is not waiting, though its progress along the route stands still meanwhile: a wait has to be standing on the ground, within 40 m. Two runs only show that a wait happened; it takes more to say how likely one is. A wait is called likely, and cued, where at least two runs waited and at least half of those that passed. Runs of your other routes count where they cover the same ground (`others`): a crossing is a crossing from either side, so the run home is evidence for the run to work. They can add to a wait but not take one away, because at a wide crossing each direction waits on its own side.
 - **Distance markers** every 500 m, and the finish.
 
 `nextCue` answers "what should the display say now?" for any point on the route: the next thing to act on and the one after, with a distance marker stepping in only when nothing else is close.
@@ -170,7 +170,7 @@ Past runs of a route say a good deal about it without any map. `buildGuide` in `
 
 **Water and toilets** are the one part that needs a map. "Look up water and toilets near this route" on the route page asks OpenStreetMap's public query service for them, sending it the box the route fits in, and only when pressed. `amenitiesAlong` keeps those within 100 m of the route and lists each one for every time the route passes it, with how far off it is and on which side; they then appear on the pre-start screen, in the list, and as cues in passing. This has been run against a stand-in for the map service, not the service itself, and never against the ground, so B6 is built but untested.
 
-Ghost run shows the turns and likely waits as cues during a run. Not built yet: climbs on the phone, since runs recorded there carry no elevation; and counting a wait at the same crossing by runs in the other direction.
+Ghost run shows the turns and likely waits as cues during a run. Not built yet: climbs on the phone, since runs recorded there carry no elevation.
 
 ## Golf
 

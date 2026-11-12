@@ -60,3 +60,4 @@ export {
 export { COURSE_DEFAULTS, courseFromOsm, holeAt, nearestOnLine } from './course.js';
 export { HEADING_DEFAULTS, createHeadingFuser, turnRate } from './heading.js';
 export { ALIGN_DEFAULTS, createAligner } from './align.js';
+export { SHARE_DEFAULTS, thinFixes, trimEnds, packRun, unpackRun } from './share.js';

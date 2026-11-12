@@ -5,10 +5,10 @@
 // Everything is driven by five keys, as on the glasses: the four arrows and
 // Enter. On a phone, a swipe is an arrow and a tap is Enter.
 
-import { toGpx, haversine, ghostFromFixes, createRunSession, groupFixes, guideFromRuns, nextCue } from '../../engine/index.js';
+import { toGpx, haversine, ghostFromFixes, createRunSession, groupFixes, guideFromRuns, nextCue, packRun, trimEnds } from '../../engine/index.js';
 import { describe, metres, wait } from '../route/screen.js';
 import { SIZE, drawRun, drawList, drawMenu, drawCard, clock, pace, km } from './hud.js';
-import { loadRuns, saveRuns, loadSettings, saveSettings, storedRun, fixesOf, runFromGpx, loadSample, saveProgress, loadProgress, clearProgress } from './store.js';
+import { loadRuns, saveRuns, loadSettings, saveSettings, storedRun, fixesOf, runFromGpx, runFromLink, loadSample, saveProgress, loadProgress, clearProgress } from './store.js';
 import { liveSource, demoSource } from './sources.js';
 
 const $ = (id) => document.getElementById(id);
@@ -85,14 +85,14 @@ function homeRows() {
   rows.push({
     id: 'pace',
     main: `Pace  ${pace(state.settings.secondsPerKm)} /km`,
-    detail: others ? `On any route · your ${others === 1 ? 'saved run takes' : `${others} saved runs take`} over on their own routes` : 'A ghost holding this pace, on any route',
+    detail: others ? `On any route · ${others === 1 ? '1 saved run takes over on its own' : `${others} saved runs take over on theirs`}` : 'A ghost holding this pace, on any route',
     adjustable: true,
   });
   for (const run of state.runs) {
     rows.push({
       id: run.id,
       main: `${km(run.distance)} km in ${clock(run.time)}`,
-      detail: `${run.demo ? 'Sample run' : dateLabel(run.startedAt)} · ${pace(run.secondsPerKm)} /km · race it on its route`,
+      detail: `${run.demo ? 'Sample run' : run.from != null ? `${run.from || 'A friend'}, ${dateLabel(run.startedAt)}` : dateLabel(run.startedAt)} · ${pace(run.secondsPerKm)} /km · race it on its route`,
     });
   }
   rows.push({
@@ -432,9 +432,84 @@ function showStatus(message) {
   if (state.demo) parts.push(`Sample run playing at ${state.demo.speed}× speed.`);
   if (state.screen === 'run' || state.screen === 'menu') parts.push(wakeLock ? 'Keeping the screen on.' : 'This browser will not keep the screen on: stop it sleeping in your phone\'s settings.');
   if (message) parts.push(message);
-  parts.push(`${state.runs.filter((r) => !r.demo).length} saved run(s) on this device.`);
+  const sent = state.runs.filter((r) => r.from != null).length;
+  parts.push(`${state.runs.filter((r) => !r.demo).length} saved run(s) on this device${sent ? `, ${sent} of them sent by friends` : ''}.`);
   $('status').textContent = parts.join(' ');
-  $('export').disabled = !state.runs.some((r) => !r.demo);
+  $('export').disabled = !state.runs.some(own);
+  listShareable();
+}
+
+// ---------------------------------------------------------------- sharing --
+
+// A run is small enough to send as a link: a friend opens it and has a ghost
+// to race, with no server and no account. The run rides in the part of the
+// address after "#", which a browser keeps to itself and never sends to the
+// site.
+
+/** A run of this device's own: not a sample, and not one a friend sent. */
+const own = (run) => !run.demo && run.from == null;
+const TRIM = 200; // metres left off each end when asked, so a link need not show where home is
+
+function listShareable() {
+  const select = $('shareRun');
+  const chosen = select.value;
+  select.replaceChildren();
+  for (const run of state.runs.filter(own)) select.add(new Option(`${dateLabel(run.startedAt)} · ${km(run.distance)} km in ${clock(run.time)}`, run.id));
+  if (!select.options.length) select.add(new Option('No runs of your own yet', ''));
+  if ([...select.options].some((option) => option.value === chosen)) select.value = chosen;
+  $('share').disabled = !select.value;
+}
+
+function makeLink() {
+  const run = state.runs.find((r) => r.id === $('shareRun').value);
+  if (!run) return null;
+  state.settings.from = $('shareFrom').value.trim();
+  state.settings.trim = $('shareTrim').checked;
+  saveSettings('ghost', state.settings);
+  const whole = { fixes: fixesOf(run), pauses: run.pauses ?? [] };
+  const { fixes, pauses, cut } = state.settings.trim ? trimEnds(whole.fixes, whole.pauses, TRIM) : { ...whole, cut: 0 };
+  const text = packRun({ startedAt: run.startedAt + cut * 1000, fixes, pauses, from: state.settings.from });
+  return { url: `${location.origin}${location.pathname}#ghost=${text}`, trimmed: fixes.length < whole.fixes.length };
+}
+
+async function shareRun() {
+  const link = makeLink();
+  if (!link) return;
+  $('shareLink').value = link.url;
+  $('shareMade').hidden = false;
+  const about = `${link.url.length.toLocaleString()} characters${link.trimmed ? `, with the first and last ${TRIM} m left off` : $('shareTrim').checked ? ', whole: the run is too short to trim' : ''}. Anyone who has the link can see where and when this run went.`;
+  try {
+    // A phone's own share sheet where there is one; otherwise the clipboard.
+    if (navigator.share) {
+      await navigator.share({ title: 'A ghost to race', text: 'Race my run with SportsHUD', url: link.url });
+      $('shareNote').textContent = `Link made: ${about}`;
+    } else {
+      await navigator.clipboard.writeText(link.url);
+      $('shareNote').textContent = `Link copied: ${about}`;
+    }
+  } catch {
+    $('shareNote').textContent = `Link made, below, to copy by hand: ${about}`;
+  }
+}
+
+/** If the address carries a run, take it in as a ghost and tidy the address. */
+function openLink() {
+  const match = /^#ghost=(.+)$/.exec(location.hash);
+  if (!match) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  try {
+    const run = runFromLink(match[1]);
+    const mine = state.runs.find((r) => r.id === run.id && own(r));
+    if (mine) return showStatus('That link is a run already saved here as your own.');
+    state.runs = [run, ...state.runs.filter((r) => r.id !== run.id)].sort((a, b) => b.startedAt - a.startedAt);
+    saveRuns(state.runs);
+    state.runs = [...state.runs.filter((r) => r.demo), ...loadRuns()];
+    const kept = state.runs.some((r) => r.id === run.id);
+    if (state.screen === 'home') state.selected = Math.max(0, homeRows().findIndex((row) => row.id === run.id));
+    showStatus(kept ? `Added a ghost from a link: ${run.from || 'a friend'}'s ${km(run.distance)} km in ${clock(run.time)}. It is saved on this device and takes over wherever your run shares its route.` : 'That ghost was not kept: there are already six newer ones from friends on this device.');
+  } catch (error) {
+    showStatus(error.message);
+  }
 }
 
 async function importGpx(input) {
@@ -461,7 +536,7 @@ async function importGpx(input) {
 }
 
 function exportLatest() {
-  const run = state.runs.find((r) => !r.demo);
+  const run = state.runs.find(own);
   if (!run) return;
   const url = URL.createObjectURL(new Blob([toGpx(fixesOf(run), { name: `SportsHUD run ${dateLabel(run.startedAt)}`, startedAt: run.startedAt })], { type: 'application/gpx+xml' }));
   const link = document.createElement('a');
@@ -511,12 +586,18 @@ async function init() {
   for (const button of document.querySelectorAll('[data-key]')) button.addEventListener('click', () => key(button.dataset.key));
   $('import').addEventListener('change', (event) => importGpx(event.target));
   $('export').addEventListener('click', exportLatest);
+  $('shareFrom').value = state.settings.from ?? '';
+  $('shareTrim').checked = state.settings.trim ?? true;
+  $('share').addEventListener('click', shareRun);
+  $('shareLink').addEventListener('focus', (event) => event.target.select());
+  window.addEventListener('hashchange', openLink);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && state.session) keepAwake();
   });
 
   setInterval(tick, 200);
   showStatus();
+  openLink();
   requestAnimationFrame(draw);
 }
 

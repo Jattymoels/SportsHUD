@@ -24,7 +24,7 @@ main { display: flex; flex-direction: column; align-items: center; }
 .pad { display: flex; gap: 8px; }
 .pad button { flex: 1; min-height: 44px; }
 .pad .enter { flex: 1.6; }
-button, input[type="file"] {
+button, select, input[type="file"], input[type="text"] {
   font: inherit;
   color: #f4f4ee;
   background: #111;
@@ -38,3 +38,13 @@ input[type="file"] { max-width: 100%; }
 summary { cursor: pointer; }
 ul { padding-left: 20px; }
 li { margin: 6px 0; }
+
+/* Sending a run as a link. */
+fieldset { margin: 4px 0 14px; padding: 10px 12px 12px; border: 1px solid #333; border-radius: 8px; display: grid; gap: 10px; min-width: 0; }
+legend { padding: 0 6px; color: #a9a9a2; font-size: 13px; }
+fieldset label { display: grid; gap: 3px; font-size: 13px; color: #a9a9a2; min-width: 0; }
+fieldset label.check { display: flex; align-items: flex-start; gap: 8px; }
+select, input[type="text"] { width: 100%; max-width: 100%; text-overflow: ellipsis; }
+#shareMade { display: grid; gap: 6px; }
+#shareNote, .note { margin: 0; font-size: 13px; color: #a9a9a2; }
+#shareNote { color: #f4f4ee; }

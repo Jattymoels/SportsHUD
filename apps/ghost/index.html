@@ -28,6 +28,22 @@
         </label>
         <button id="export" type="button">Download my latest run (GPX)</button>
       </p>
+      <fieldset id="shareBox">
+        <legend>Send a run to a friend as a ghost</legend>
+        <label>Which run
+          <select id="shareRun"></select>
+        </label>
+        <label>Your name, as they will see it
+          <input id="shareFrom" type="text" maxlength="24" autocomplete="given-name">
+        </label>
+        <label class="check"><input type="checkbox" id="shareTrim" checked> Leave off the first and last 200 m, so the link does not show where the run began and ended</label>
+        <button id="share" type="button">Make a link</button>
+        <div id="shareMade" hidden>
+          <p id="shareNote" role="status"></p>
+          <input id="shareLink" type="text" readonly aria-label="The link">
+        </div>
+        <p class="note">The whole run is in the link itself. Nothing is uploaded, and there is no account. Whoever opens it gets the run as a ghost on their own device.</p>
+      </fieldset>
       <details>
         <summary>Using this on a run</summary>
         <ul>
@@ -35,6 +51,7 @@
           <li>Keep this page open and the screen on. A phone that locks stops reporting where you are.</li>
           <li>Swipe on the display for the arrows, tap it for Enter. On the glasses these are the wristband gestures.</li>
           <li>Your runs are saved on this device only, and each becomes a ghost to race next time.</li>
+          <li>A friend can send you a run as a link. Open it on this device and it is added to your ghosts.</li>
           <li><a href="?demo=run&amp;speed=10">Watch a sample run</a> without going anywhere.</li>
         </ul>
       </details>

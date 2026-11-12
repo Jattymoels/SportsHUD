@@ -63,6 +63,8 @@ Choosing the pace ghost brings your saved runs along. You run wherever you like 
 
 Racing a saved run does not need you to stay on its route. Wherever you are off it (another street for a few blocks, a start part-way along, a different finish) a ghost holding that run's average pace stands in, the screen says OFF ROUTE and names the stand-in, and the gap carries on when the saved run's ghost takes over again. While you are on its route, the next turn or likely wait within 200 m is named under the clock and marked on the road. Those come from the route guide, built from that run and any other saved runs of the same route.
 
+"Send a run to a friend as a ghost" makes a link that holds the whole run: an hour's run is about 1,500 characters. Nothing is uploaded and there is no account; the run rides in the part of the address after `#`, which a browser never sends to the site. Whoever opens the link has the run added to their ghosts, under the name the sender gave, and it takes over wherever their own runs share its route. By default the first and last 200 m are left off, so a link does not show where a run from home began and ended. Six ghosts from friends are kept, apart from the twelve runs of your own. `packRun` and `unpackRun` in `engine/share.js` do the packing: only the moments where pace or direction changed are kept, such that the rebuilt run is never more than 2 m from the original at the same second.
+
 `apps/ghost/?demo=run&speed=10` plays a sample run without GPS. `apps/ghost/?demo=shared&speed=10` plays one that shares only part of the ghost's route.
 
 ## The anchoring probe, on a phone

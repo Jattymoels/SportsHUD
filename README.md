@@ -16,12 +16,13 @@ Build 1 of the spec: the track engine and a desk replay harness.
 | `apps/probe/` | The anchoring probe: the route, its markers and the ghost placed over a phone's camera picture, using only GPS and the compass. The nearest thing to glasses that place things in the world, and a first measure of how far off the placing is. |
 | `apps/preview/` | Through the glasses: a recorded run from the runner's eyes, with the ghost and distance markers placed in the world along the route. A preview of where the product is heading, with a switch to the heads-up square that today's display can show. Desk tool. |
 | `apps/route/` | The route guide, as far as past runs alone can take it: the route's length, climb, turns and usual waiting places, as a pre-start screen and as cues on the way. No map data yet, so no water or toilets. |
+| `apps/golf/` | The golf display on a made-up hole: distances to the green, where the chosen club lands the ball in the wind, look to range, and hiding at address. A desk tool so far, with sliders standing in for GPS, the compass and a forecast. |
 | `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to any kind of ghost. |
 | `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. One pair is two different runs that share 800 m of road, for live segments. |
 | `tools/` | A small local web server and a command-line report for B1 and B12. |
 | `docs/` | The spec and research notes. |
 
-The golf app in the spec (`apps/golf/`) comes with build 5.
+All five apps in the spec now exist in some form. None has been tried outdoors.
 
 ## Running it
 
@@ -164,6 +165,23 @@ Past runs of a route say a good deal about it without any map. `buildGuide` in `
 `apps/route/` shows the result two ways: the pre-start screen the glasses would show (the route's shape, distance, climb, usual time, expected waiting) and the cue screen on the way. Below those are the height profile and the full list. Load any number of your own GPX files at once; they are sorted into routes for you to pick from. The same turns, waits and climbs appear as signs in `apps/preview/`.
 
 Ghost run shows the turns and likely waits as cues during a run. Not built yet: water and toilets, which need map data (B6 in the spec); climbs on the phone, since runs recorded there carry no elevation; and counting a wait at the same crossing by runs in the other direction.
+
+## Golf
+
+`engine/golf.js` works from a position and a mapped hole: the outline of the green, the pin if its place is known, the line of play, and the outline of each bunker and water hazard. That is the shape OpenStreetMap's golf tags come in.
+
+- **Green distances** (`greenDistances`). Front, centre and back are along the line from where you stand through the middle of the green: front where that line reaches the green, back where it leaves. So they change as you move to the side, as a golfer expects.
+- **Landing zone** (`landingZone`). The chosen club's carry along the aim, moved by the wind, with a zone around it 5% of the carry deep and 8% wide either side. `zoneTouches` says when that reaches into a hazard, and `clubFor` picks the club whose carry in this wind is nearest a distance.
+- **Wind** (`carryInWind`) is a rule of thumb, not a measurement: a headwind costs about 1% of carry per mph, a tailwind gives about half that, and a crosswind moves the ball sideways by 0.4% of the carry per km/h. It moves the zone the right way, which is what B8 asks; the amounts are placeholders until there are real shots to learn from.
+- **Hazards in play** (`hazardsInPlay`): how far to reach each one near the aim, and how far to carry it.
+- **Look to range** (`lookTarget`): the mapped feature within 7.5° of where you face, and its distance. `lookAround` says which way to turn when nothing is.
+- **Hide at address** (`createAddressHider`): looking down past 40° for a third of a second hides the display; it returns when the gaze comes back above 25° down. Two angles, so a head held near the line does not make it flicker.
+
+The clubs are a typical bag in metres, to be replaced by the golfer's own.
+
+`fixtures/golf.mjs` is a made-up par 4 laid out on a grid, so that every expected number in `engine/tests/golf.test.js` is a hand calculation. `apps/golf/` shows three glasses screens on it (the green, the club and its zone, look to range), with sliders for where you are, which way you face, how far your head is tilted, and the wind. Enter moves between screens; on the club screen Left and Right change club and Up and Down move the aim. "Competition" leaves distances only.
+
+Not built yet: a real course from map data, your position from GPS, the compass and tilt from the device, wind from a forecast, and entering your own club distances. So B7 and B9, which need a course, are untested.
 
 ## Deployment
 

@@ -32,3 +32,26 @@ export { GUIDE_DEFAULTS, buildGuide, guideFromRuns, groupRuns, groupFixes, eleva
 export { AUTOPAUSE_DEFAULTS, createAutoPause } from './autopause.js';
 export { createRunSession } from './session.js';
 export { fillGaps, createReplay, checkB1, checkPace, checkSegments } from './replay.js';
+export {
+  bearingTo,
+  distanceTo,
+  turnBetween,
+  pointAlong,
+  centreOf,
+  crossings,
+  inside,
+  greenDistances,
+  WIND_MODEL,
+  carryInWind,
+  DEFAULT_CLUBS,
+  ZONE,
+  landingZone,
+  clubFor,
+  zoneTouches,
+  hazardsInPlay,
+  lookTarget,
+  lookAround,
+  featuresOf,
+  ADDRESS_DEFAULTS,
+  createAddressHider,
+} from './golf.js';

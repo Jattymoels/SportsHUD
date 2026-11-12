@@ -3,6 +3,7 @@
 A ghost-racing and golf heads-up display for Meta Ray-Ban Display glasses: a static web app, no backend. "SportsHUD" is a placeholder name.
 
 - [docs/spec.md](docs/spec.md) says what is being built and how each behaviour is tested.
+- [docs/results.md](docs/results.md) says where each behaviour stands: what has been measured, and what it still needs.
 - [docs/research/](docs/research/README.md) holds the background notes.
 
 ## What is here
@@ -167,7 +168,9 @@ Past runs of a route say a good deal about it without any map. `buildGuide` in `
 
 `apps/route/` shows the result two ways: the pre-start screen the glasses would show (the route's shape, distance, climb, usual time, expected waiting) and the cue screen on the way. Below those are the height profile and the full list. Load any number of your own GPX files at once; they are sorted into routes for you to pick from. The same turns, waits and climbs appear as signs in `apps/preview/`.
 
-Ghost run shows the turns and likely waits as cues during a run. Not built yet: water and toilets, which need map data (B6 in the spec); climbs on the phone, since runs recorded there carry no elevation; and counting a wait at the same crossing by runs in the other direction.
+**Water and toilets** are the one part that needs a map. "Look up water and toilets near this route" on the route page asks OpenStreetMap's public query service for them, sending it the box the route fits in, and only when pressed. `amenitiesAlong` keeps those within 100 m of the route and lists each one for every time the route passes it, with how far off it is and on which side; they then appear on the pre-start screen, in the list, and as cues in passing. This has been run against a stand-in for the map service, not the service itself, and never against the ground, so B6 is built but untested.
+
+Ghost run shows the turns and likely waits as cues during a run. Not built yet: climbs on the phone, since runs recorded there carry no elevation; and counting a wait at the same crossing by runs in the other direction.
 
 ## Golf
 
@@ -206,7 +209,9 @@ The course file is derived from OpenStreetMap, © OpenStreetMap contributors, an
 
 - **The course test** logs what a rangefinder or a course marker says beside what the app says, and keeps the tally against the targets: within 5 m on 9 of 10 readings for green distances (B7), the right feature 8 times in 10 for look to range (B9). A laser reads to the flag, wherever the hole is cut that day, so "I am at today's pin" takes where you stand as the pin for the rest of the day. The log stays on the device and downloads as CSV.
 
-Not built yet: wind from a forecast (it is a slider), and the other 18 holes. B7 and B9 are ready to test on the course but untested.
+- **The wind** is a slider, or "Get the wind at the course now", which asks Open-Meteo, a public forecast service, telling it where the course is to the nearest kilometre or so and never where you are. It is a forecast for the area at 10 m up, not a reading on the course. Run so far against a stand-in for the service only.
+
+Not built yet: the other 18 holes. B7 and B9 are ready to test on the course but untested.
 
 ## Deployment
 

@@ -305,6 +305,35 @@ function pinHere() {
   render();
 }
 
+/**
+ * The wind at the course now, from a public forecast service. It is told
+ * where the hole is to the nearest kilometre or so, never where the golfer is.
+ */
+async function windNow() {
+  const button = $('windNow');
+  button.disabled = true;
+  $('windNote').textContent = 'Asking Open-Meteo…';
+  try {
+    const { lat, lon } = state.hole.tee;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(2)}&longitude=${lon.toFixed(2)}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kmh`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`the forecast service answered ${response.status}`);
+    const now = (await response.json()).current;
+    const speed = Number(now?.wind_speed_10m);
+    const from = Number(now?.wind_direction_10m);
+    if (!Number.isFinite(speed) || !Number.isFinite(from)) throw new Error('the forecast had no wind in it');
+    $('wind').value = clamp(Math.round(speed), 0, 45);
+    $('from').value = (Math.round(from / 5) * 5) % 360;
+    const gusts = Number(now.wind_gusts_10m);
+    $('windNote').textContent = `Open-Meteo, ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}: ${Math.round(speed)} km/h from the ${compassPoint(from)}${Number.isFinite(gusts) ? `, gusting ${Math.round(gusts)}` : ''}. A forecast for the area at 10 m up, not a reading on the course.`;
+    render();
+  } catch (error) {
+    $('windNote').textContent = `Could not get the wind: ${error.message}. The sliders are unchanged.`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // ---------------------------------------------------------------- the bag --
 
 function buildBag() {
@@ -373,6 +402,7 @@ async function init() {
   state.pins = loadSettings('golfPins');
   state.test = initFieldTest({ now: () => state.last, say: showStatus });
   $('pinHere').addEventListener('click', pinHere);
+  $('windNow').addEventListener('click', windNow);
   buildBag();
   $('resetBag').addEventListener('click', () => {
     state.clubs = BAG.map((c) => ({ ...c }));

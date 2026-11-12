@@ -500,6 +500,7 @@ export function upcoming(guide, dist, { ahead = 400, kinds = null } = {}) {
 }
 
 const ACT_ON = ['turn', 'wait', 'climb', 'finish'];
+const PASSING = ['marker', 'water', 'toilets'];
 
 /**
  * The cue for a display to show someone `dist` metres along the route.
@@ -508,6 +509,7 @@ const ACT_ON = ['turn', 'wait', 'climb', 'finish'];
  * wait, the foot of a climb, or the finish. A distance marker takes its
  * place only when it is within `markerWithin` metres and there is nothing
  * to act on within `actWithin`: a turn 150 m off matters more than a marker.
+ * A water point or toilets beside the route is mentioned the same way.
  * `then` is the thing to act on after that. `climb` is the climb the runner
  * is on, if any, with `left`, the metres to its top. Each carries `in`, the
  * metres to go.
@@ -521,7 +523,114 @@ export function nextCue(guide, dist, { markerWithin = 150, actWithin = 200 } = {
   const climb = all.find((f) => f.kind === 'climb' && f.in === 0) ?? null;
   const ahead = all.filter((f) => f.in > 0);
   const act = ahead.filter((f) => ACT_ON.includes(f.kind));
-  const marker = ahead.find((f) => f.kind === 'marker' && f.in <= markerWithin);
+  // Things worth a mention in passing: a distance marker, a water point, toilets.
+  const marker = ahead.find((f) => PASSING.includes(f.kind) && f.in <= markerWithin);
   if (marker && (!act.length || act[0].in > actWithin)) return { now: marker, then: act[0] ?? null, climb };
   return { now: act[0] ?? null, then: act[1] ?? null, climb };
+}
+
+// ---------------------------------------------------- water and toilets --
+
+export const AMENITY_DEFAULTS = {
+  within: 100, // metres from the route that a water point or toilets may be and still be shown
+  same: 20, // metres within which two map entries of the same kind are one place
+};
+
+/** What OpenStreetMap calls the two things runners ask for. */
+function amenityKind(tags = {}) {
+  if (tags.amenity === 'toilets') return 'toilets';
+  if (tags.amenity === 'drinking_water' || tags.amenity === 'water_point') return 'water';
+  if (tags.drinking_water === 'yes' && (tags.man_made === 'water_tap' || tags.amenity === 'fountain')) return 'water';
+  return null;
+}
+
+/**
+ * The question to put to OpenStreetMap's Overpass service for the water
+ * points and toilets around a route: everything of those kinds in the box
+ * the route fits in, with `margin` metres to spare.
+ * @returns {string} Overpass QL, for its `data` parameter
+ */
+export function amenityQuery(route, margin = 150) {
+  let south = Infinity, north = -Infinity, west = Infinity, east = -Infinity;
+  for (let i = 0; i < route.lat.length; i++) {
+    south = Math.min(south, route.lat[i]);
+    north = Math.max(north, route.lat[i]);
+    west = Math.min(west, route.lon[i]);
+    east = Math.max(east, route.lon[i]);
+  }
+  const dLat = margin / 111195;
+  const dLon = margin / (111195 * Math.cos((((south + north) / 2) * Math.PI) / 180));
+  const box = [south - dLat, west - dLon, north + dLat, east + dLon].map((v) => v.toFixed(5)).join(',');
+  return `[out:json][timeout:25];(nwr["amenity"~"^(drinking_water|water_point|toilets)$"](${box});nwr["drinking_water"="yes"]["man_made"="water_tap"](${box});nwr["drinking_water"="yes"]["amenity"="fountain"](${box}););out center tags;`;
+}
+
+/**
+ * Water points and toilets beside a route, from OpenStreetMap data.
+ *
+ * @param route from buildRoute
+ * @param {{elements:Array}} osm what Overpass returns for amenityQuery, or
+ *   any OpenStreetMap JSON: nodes with lat and lon, ways and relations with
+ *   a `center`
+ * @param {Partial<typeof AMENITY_DEFAULTS>} [options]
+ * @returns {Array<{kind:'water'|'toilets', dist:number, off:number, side:'left'|'right', name:string|null, lat:number, lon:number}>}
+ *   in order along the route. dist: metres along the route to where it is
+ *   passed. off: metres from the route. side: which side it is on, the way
+ *   the route runs.
+ */
+export function amenitiesAlong(route, osm, options) {
+  const o = { ...AMENITY_DEFAULTS, ...options };
+  const found = [];
+  for (const e of osm.elements ?? []) {
+    const kind = amenityKind(e.tags);
+    const lat = e.lat ?? e.center?.lat;
+    const lon = e.lon ?? e.center?.lon;
+    if (!kind || lat == null || lon == null) continue;
+    const [x, y] = route.proj.toXY(lat, lon);
+    // A route can pass the same place more than once: out and back, or lap
+    // after lap. Each pass within reach is its own entry, found by walking
+    // the route and noting where it comes nearest.
+    const away = (d) => {
+      const p = pointAtDistance(route, d);
+      return Math.hypot(p.x - x, p.y - y);
+    };
+    const step = 10;
+    const passes = [];
+    let last = Infinity;
+    let falling = false;
+    for (let d = 0; d <= route.length + step; d += step) {
+      const now = away(Math.min(d, route.length));
+      if (now > last && falling && last <= o.within + step) passes.push(d - step);
+      falling = now < last;
+      last = now;
+    }
+    if (falling && last <= o.within + step) passes.push(route.length);
+    for (const about of passes) {
+      const snap = snapToRoute(route, lat, lon, { near: about, window: 2 * step, nearSigma: 1e12 });
+      if (snap.offset > o.within) continue;
+      if (found.some((f) => f.lat === lat && f.lon === lon && f.kind === kind && Math.abs(f.dist - snap.dist) < 2 * o.within)) continue;
+      const on = pointAtDistance(route, snap.dist);
+      // Positive: to the left of the way the route runs there.
+      const cross = snap.dir[0] * (y - on.y) - snap.dir[1] * (x - on.x);
+      found.push({ kind, dist: snap.dist, off: snap.offset, side: cross > 0 ? 'left' : 'right', name: e.tags.name ?? null, lat, lon });
+    }
+  }
+  found.sort((a, b) => a.dist - b.dist);
+  // A toilet block is often mapped twice, as a point and as a building.
+  const kept = [];
+  for (const f of found) {
+    const apart = (k) => Math.hypot((k.lat - f.lat) * 111195, (k.lon - f.lon) * 111195 * Math.cos((f.lat * Math.PI) / 180));
+    const twin = kept.find((k) => k.kind === f.kind && (k.lat !== f.lat || k.lon !== f.lon) && apart(k) <= o.same && Math.abs(k.dist - f.dist) < 2 * o.within);
+    if (!twin) kept.push(f);
+  }
+  return kept;
+}
+
+/**
+ * A guide with water points and toilets added to what it lists and cues.
+ * @param guide from buildGuide
+ * @param {Array} amenities from amenitiesAlong, for the guide's own route
+ */
+export function withAmenities(guide, amenities) {
+  const features = [...guide.features.filter((f) => !PASSING.includes(f.kind) || f.kind === 'marker'), ...amenities].sort((a, b) => a.dist - b.dist);
+  return { ...guide, amenities, features };
 }

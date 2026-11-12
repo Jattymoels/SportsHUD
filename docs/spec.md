@@ -95,10 +95,10 @@ Five builds, in this order, cover all ten behaviours. Each is tested at the desk
 1. **Track engine and replay harness.** Reads a GPS recording, snaps positions to the route, and computes distance along it and the gap between two recordings. Replays any recording at the desk. Proves B1 and B2. Everything else depends on it.
 2. **Ghost race screen.** A 600×600 display showing the gap in seconds and metres, a ghost marker ahead or behind, and current pace. Proves B3 and B10.
 3. **Anchoring probe.** A test screen that places a marker toward a chosen target and logs compass heading, position and marker error. Proves B4 and B5, and tells us early whether anchored graphics are good enough for builds 4 and 5.
-4. **Route guide.** A pre-start preview and a next-marker cue, using OpenStreetMap for water points and toilets. Proves B6. *Started 2026-11-12 with the part that needs no map: distance, climb, turns, pause points and distance markers worked out from past runs of the route, shown as the pre-start screen and as cues. Water and toilets are not built, so B6 is untested.*
+4. **Route guide.** A pre-start preview and a next-marker cue, using OpenStreetMap for water points and toilets. Proves B6. *Started 2026-11-12 with the part that needs no map: distance, climb, turns, pause points and distance markers worked out from past runs of the route, shown as the pre-start screen and as cues. Water and toilets were added the same day as a lookup the user asks for; B6 is untested until three routes are checked against the ground.*
 5. **Golf HUD.** One mapped course: green distances, a club picker that draws the landing zone, wind, look-to-range, and auto-hide at address. Proves B7 to B10. *Started 2026-11-12 on a made-up hole at the desk: the maths for all four and three first screens. At the desk, B8 passes (zone centre on the club's carry before wind; wind moves it the correct way) and the display hides 0.3 s after looking down against B10's 1 s. B7 and B9 need a mapped course, so they are untested, as is the 2-second read in B10. The Grange's 18 mapped holes were added the same day, with position, compass and tilt from the phone, so B7 and B9 can now be tested on the course.*
 
-Each behaviour ends with a short written result: the measured number, pass or fail, and what it means for the design.
+Each behaviour ends with a short written result: the measured number, pass or fail, and what it means for the design. These are kept in [results.md](results.md).
 
 ## Technical approach
 

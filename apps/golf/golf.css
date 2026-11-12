@@ -95,3 +95,14 @@ th, td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--gri
 .note { margin: 8px 0; min-height: 1.2em; }
 .credit { max-width: 1100px; margin: 14px auto 0; font-size: 12px; color: var(--ink-2); }
 .credit a { color: inherit; }
+
+.tally { margin: 6px 0 12px; font-weight: 600; }
+.tally .verdict { margin-left: 8px; padding: 1px 9px; border-radius: 999px; border: 1.5px solid currentColor; font-size: 13px; }
+.tally .pass { color: #0ca30c; }
+.tally .fail { color: var(--critical); }
+.tally .verdict span { color: var(--ink); }
+.looking { align-self: center; font-size: 14px; }
+.bar input[type="number"] { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 6px; padding: 6px 10px; width: 7em; }
+.scroll { max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; margin: 6px 0; }
+#testTable th, #testTable td { white-space: nowrap; }
+details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }

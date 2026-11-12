@@ -54,5 +54,7 @@ export {
   featuresOf,
   ADDRESS_DEFAULTS,
   createAddressHider,
+  scoreDistances,
+  scoreLooks,
 } from './golf.js';
 export { COURSE_DEFAULTS, courseFromOsm, holeAt, nearestOnLine } from './course.js';

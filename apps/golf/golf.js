@@ -9,6 +9,7 @@ import {
 import { HOLE } from '../../fixtures/golf.mjs';
 import { loadSettings, saveSettings } from '../ghost/store.js';
 import { BAG } from './bag.js';
+import { initFieldTest } from './fieldtest.js';
 import { drawGreen, drawClub, drawLook, drawHidden, compassPoint } from './screens.js';
 
 const $ = (id) => document.getElementById(id);
@@ -28,6 +29,9 @@ const state = {
   hider: createAddressHider(),
   hidden: false,
   fix: null, // the phone's latest position: { lat, lon, accuracy }
+  pins: {}, // today's pin on each hole, where the golfer has stood at it: { "course:hole": { lat, lon, day } }
+  last: null, // the latest working, for the course test to log from
+  test: null,
   pose: null, // the phone's latest { heading, tilt } in degrees
   watch: null,
 };
@@ -55,10 +59,20 @@ function positionAt(hole, metres, side) {
 }
 
 const onPhone = () => $('gps').checked && state.fix;
+const today = () => new Date().toISOString().slice(0, 10);
+const pinKey = (hole) => `${state.course.name}:${hole.number}`;
+
+/** Today's pin on this hole, if the golfer has stood at it today. */
+function todaysPin(hole) {
+  const pin = state.pins[pinKey(hole)];
+  return pin && pin.day === today() ? { lat: pin.lat, lon: pin.lon } : null;
+}
 
 /** Everything the screens show, for where the golfer is. */
 function work() {
-  const { hole, clubs } = state;
+  const { clubs } = state;
+  const set = todaysPin(state.hole);
+  const hole = set ? { ...state.hole, pin: set } : state.hole;
   const { length } = lineOf(hole);
   const position = onPhone() ? { lat: state.fix.lat, lon: state.fix.lon } : positionAt(hole, Number($('along').value) * length, Number($('side').value));
   const competition = $('competition').checked;
@@ -107,13 +121,15 @@ function work() {
   const features = featuresOf(hole);
   const around = lookAround(position, heading, features);
   const look = lookTarget(position, heading, features);
-  return { hole, position, competition, wind, green, pin, onLine, target, toTarget, aim, suggest: partShot ? { club } : suggest, why, club, zone, flight, inPlay, trouble, heading, around, look, length };
+  return { hole, position, competition, wind, green, pin, pinSet: Boolean(set), accuracy: onPhone() ? state.fix.accuracy : null, onLine, target, toTarget, aim, suggest: partShot ? { club } : suggest, why, club, zone, flight, inPlay, trouble, heading, around, look, length };
 }
 
 // --------------------------------------------------------------- drawing --
 
 function render() {
   const w = work();
+  state.last = w;
+  state.test?.show(w);
   const tilt = state.pose && $('sensors').checked ? state.pose.tilt : Number($('tilt').value);
   state.hidden = state.hider.update(tilt, performance.now() / 1000);
   const ctx = $('screen').getContext('2d');
@@ -153,7 +169,7 @@ function numbers(w) {
   const rows = [
     ['Hole', `${state.course.name}, hole ${w.hole.number}${w.hole.par ? `: par ${w.hole.par}` : ''}${w.hole.index ? `, stroke index ${w.hole.index}` : ''}, ${Math.round(w.length)} m along its line of play`],
     ['Green, along the line from you through its middle', `front ${m(w.green.front)} · centre ${m(w.green.centre)} · back ${m(w.green.back)}${w.green.onGreen ? ' (you are on it)' : ''}`],
-    ['Pin, as mapped', w.pin == null ? 'not mapped' : m(w.pin)],
+    [w.pinSet ? 'Pin, where you stood at it today' : 'Pin, as mapped', w.pin == null ? 'not mapped' : m(w.pin)],
     ['Aiming at', `${w.target.name}, ${m(w.toTarget)} away on ${w.aim.toFixed(1)}°${state.nudge ? ` (moved ${Math.abs(state.nudge)}° ${state.nudge > 0 ? 'right' : 'left'} by hand)` : ''}`],
   ];
   if (!w.competition) {
@@ -278,6 +294,17 @@ async function toggleSensors() {
   }
 }
 
+/** Take where the golfer is standing as today's pin on this hole. */
+function pinHere() {
+  const w = state.last;
+  if (!w) return;
+  if (!w.green.onGreen && w.green.front > 8) return showStatus(`Stand at the flag first: you are ${Math.round(w.green.front)} m short of the green.`);
+  state.pins[pinKey(state.hole)] = { lat: w.position.lat, lon: w.position.lon, day: today() };
+  saveSettings('golfPins', state.pins);
+  showStatus(`Today's pin on hole ${state.hole.number} is set to where you are standing. It is used for the rest of today.`);
+  render();
+}
+
 // ---------------------------------------------------------------- the bag --
 
 function buildBag() {
@@ -343,6 +370,9 @@ function onKey(event) {
 async function init() {
   const saved = loadSettings('golf').clubs;
   if (Array.isArray(saved) && saved.length) state.clubs = saved;
+  state.pins = loadSettings('golfPins');
+  state.test = initFieldTest({ now: () => state.last, say: showStatus });
+  $('pinHere').addEventListener('click', pinHere);
   buildBag();
   $('resetBag').addEventListener('click', () => {
     state.clubs = BAG.map((c) => ({ ...c }));

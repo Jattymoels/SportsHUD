@@ -77,6 +77,38 @@
         <table id="numbers" class="stats"></table>
       </section>
 
+      <section class="card wide" aria-label="Course test">
+        <h2>Course test <span class="unit">check the numbers against a rangefinder; kept on this device</span></h2>
+        <p class="note">A laser gives the distance to the flag, wherever the hole is cut today. So either stand at the flag and press "I am at today's pin" first, then check "pin" from anywhere on that hole; or check "centre" against the course's distance markers.</p>
+        <div class="bar">
+          <label>The rangefinder or marker says, to the
+            <select id="testTo">
+              <option value="pin">pin</option>
+              <option value="centre">centre of the green</option>
+              <option value="front">front of the green</option>
+              <option value="back">back of the green</option>
+            </select>
+          </label>
+          <label>metres
+            <input id="testMetres" type="number" inputmode="decimal" min="1" max="700" step="1">
+          </label>
+          <button id="testLog" type="button">Log it</button>
+          <button id="pinHere" type="button">I am at today's pin</button>
+        </div>
+        <p class="tally" id="b7Tally"></p>
+        <div class="bar">
+          <span id="lookNow" class="looking"></span>
+          <button id="lookRight" type="button">That is what I am looking at</button>
+          <button id="lookWrong" type="button">It is not</button>
+        </div>
+        <p class="tally" id="b9Tally"></p>
+        <details id="testBox">
+          <summary>Everything logged</summary>
+          <div class="scroll"><table id="testTable"></table></div>
+        </details>
+        <p><button id="testCsv" type="button">Download it (CSV)</button> <button id="testClear" type="button">Clear it</button></p>
+      </section>
+
       <section class="card wide" aria-label="Clubs">
         <h2>The bag <span class="unit">carry in metres, in still air; changes are kept on this device</span></h2>
         <div id="bag" class="bag"></div>

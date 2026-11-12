@@ -45,3 +45,8 @@ th { font-weight: 500; color: #a9a9a2; }
 summary { cursor: pointer; margin-top: 14px; }
 ul { padding-left: 20px; }
 li { margin: 6px 0; }
+
+label.check { display: flex; align-items: center; gap: 8px; }
+
+/* The results table has six columns: on a narrow screen it scrolls sideways within its own box. */
+#results { display: block; max-width: 100%; overflow-x: auto; }

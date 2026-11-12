@@ -58,3 +58,4 @@ export {
   scoreLooks,
 } from './golf.js';
 export { COURSE_DEFAULTS, courseFromOsm, holeAt, nearestOnLine } from './course.js';
+export { HEADING_DEFAULTS, createHeadingFuser, turnRate } from './heading.js';

@@ -74,7 +74,9 @@ Open `apps/probe/` on the phone, outdoors, on a route you have run, and allow th
 3. If the line points off to one side, slide "Turn the picture". If things look too large or too small against the street, change how wide the camera sees.
 4. Start the ghost, and walk or jog the route with the phone held in front of you.
 
-Where you are along the route comes from GPS, snapped to the route as everywhere else. Which way you are facing comes from the phone's compass, and that is the one thing between this and a ghost that sits still on the road. So the probe measures it: while you move along the route with the phone pointing ahead, it compares the compass with the route's direction and shows the typical difference, against the spec's B4 targets of 5° walking and 10° running. "Match the compass" takes out a steady lean.
+Where you are along the route comes from GPS, snapped to the route as everywhere else. Which way you are facing comes from the phone's compass, and that is the one thing between this and a ghost that sits still on the road. A compass is noisy and can be out by a steady amount: magnetic north alone is 8° from true north in Adelaide. So the heading is kept by `engine/heading.js`: it follows the gyroscope from moment to moment, leans on the compass over seconds, and learns the compass's steady error from the direction you are travelling, which has none. On made-up sensors with a compass 9° out, typical error falls from 9° to about 2.5°; on a real device it has not been tried.
+
+The probe measures the result: while you move along the route with the phone pointing ahead, it compares both the compass alone and the corrected heading with the route's direction and shows the typical difference of each, against the spec's B4 targets of 5° walking and 10° running. The correction can be switched off to compare, and "Match the compass" still takes out a steady lean by hand.
 
 `apps/probe/?demo=run&speed=5` plays a sample run on a stand-in street, with no camera or compass needed.
 

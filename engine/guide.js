@@ -9,6 +9,7 @@
 // engine, so a display can ask "what is coming up from here?".
 
 import { toFixes } from './gpx.js';
+import { haversine } from './geo.js';
 import { buildRoute, snapToRoute, pointAtDistance } from './route.js';
 import { projectRecording, monotone } from './progress.js';
 import { findStops } from './gap.js';
@@ -24,8 +25,11 @@ export const GUIDE_DEFAULTS = {
   turnBaseline: 20, // metres either side over which the direction is taken
   pauseSeconds: 5, // standing at least this long is a wait
   pauseWithin: 40, // metres along the route within which waits on different runs are the same place
+  standWithin: 40, // metres a runner may shift about on the ground and still be standing
   endZone: 30, // metres at each end of the route where standing is just starting or finishing
   offRoute: 25, // metres: a recording typically further than this from the route is not a run of it
+  cover: 0.8, // and it must travel at least this share of the route, in the route's direction
+  turnWithin: 30, // metres along the route within which turns on different runs are the same turn
   markerEvery: 500, // metres between distance markers
 };
 
@@ -35,12 +39,47 @@ const median = (values) => {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 };
 
-/** Does this recording follow the route? Judged by how far its fixes typically are from it. */
-function follows(route, fixes, limit) {
+/**
+ * Is this recording a run of the route? It must keep close to the route's
+ * line, and travel most of it in the route's own direction: the same streets
+ * run the other way are a different route.
+ */
+function follows(route, fixes, options) {
+  const o = { ...GUIDE_DEFAULTS, ...options };
   const offsets = [];
   const every = Math.max(1, Math.floor(fixes.length / 60));
   for (let i = 0; i < fixes.length; i += every) offsets.push(snapToRoute(route, fixes[i].lat, fixes[i].lon, { near: 0, window: Infinity, nearSigma: 1e12 }).offset);
-  return median(offsets) <= limit;
+  if (median(offsets) > o.offRoute) return false;
+  const { dist } = projectRecording(route, fixes, options);
+  return dist[dist.length - 1] - dist[0] >= o.cover * route.length;
+}
+
+/**
+ * Sort recordings into routes: recordings that run the same line the same
+ * way belong together. A commute out and the same commute home are two
+ * routes.
+ *
+ * @param {Array} recordings from parseGpx, in any order
+ * @returns {Array<Array<number>>} one list per route of indexes into
+ *   `recordings`, the route with the most runs first. Within a route the
+ *   most typical run, the one of middling length, comes first, so that it
+ *   is the one to draw the route's line.
+ */
+export function groupRuns(recordings, options) {
+  const all = recordings.map((recording) => toFixes(recording));
+  const groups = [];
+  all.forEach((fixes, i) => {
+    const home = groups.find((g) => follows(g.route, fixes, options));
+    if (home) home.members.push(i);
+    else groups.push({ route: buildRoute(fixes, options), members: [i] });
+  });
+  const lengths = all.map((fixes) => buildRoute(fixes, options).length);
+  return groups
+    .sort((a, b) => b.members.length - a.members.length)
+    .map(({ members }) => {
+      const typical = [...members].sort((a, b) => lengths[a] - lengths[b])[(members.length - 1) >> 1];
+      return [typical, ...members.filter((i) => i !== typical)];
+    });
 }
 
 // ------------------------------------------------------------ elevation --
@@ -73,10 +112,11 @@ export function elevationAlong(route, runs, options) {
   for (const fixes of runs) {
     const withEle = fixes.filter((f) => f.ele != null);
     if (withEle.length < 2) continue;
-    const { dist } = projectRecording(route, withEle, options);
+    const { dist, off } = projectRecording(route, withEle, options);
     const total = new Float64Array(n);
     const hits = new Float64Array(n);
     for (let i = 0; i < withEle.length; i++) {
+      if (off[i]) continue; // a reading taken on some other street says nothing about this one
       const k = Math.min(n - 1, Math.max(0, Math.round(dist[i] / step)));
       total[k] += withEle[i].ele;
       hits[k]++;
@@ -252,6 +292,52 @@ export function findTurns(route, options) {
   return turns;
 }
 
+/**
+ * The turns several runs of a route agree on.
+ *
+ * One recording's line has that day's quirks in it: a crossing taken a
+ * little further along, a step round something. So with three or more runs,
+ * each run's own turns are found, placed on the route, and a turn is kept
+ * only where at least half the runs made it.
+ *
+ * @param route from buildRoute, the line everything is placed on
+ * @param {Array<Array<{lat:number, lon:number}>>} runs fixes of each recording
+ * @returns turns as from findTurns, each with `runs` and `of`: how many of
+ *   the runs made it. With fewer than three runs, the route's own turns.
+ */
+export function agreedTurns(route, runs, options) {
+  const o = { ...GUIDE_DEFAULTS, ...options };
+  if (runs.length < 3) return findTurns(route, options).map((turn) => ({ ...turn, runs: 1, of: 1 }));
+  const seen = [];
+  runs.forEach((fixes, run) => {
+    const own = buildRoute(fixes, options);
+    for (const turn of findTurns(own, options)) {
+      const where = pointAtDistance(own, turn.dist);
+      const snap = snapToRoute(route, where.lat, where.lon, { near: (turn.dist / own.length) * route.length, window: 300, nearSigma: 150 });
+      if (snap.offset <= o.offRoute) seen.push({ ...turn, dist: snap.dist, run });
+    }
+  });
+  seen.sort((a, b) => a.dist - b.dist);
+  const places = [];
+  for (const turn of seen) {
+    const last = places[places.length - 1];
+    if (last && turn.dist - last[last.length - 1].dist <= o.turnWithin) last.push(turn);
+    else places.push([turn]);
+  }
+  const turns = [];
+  for (const place of places) {
+    const made = new Set(place.map((t) => t.run)).size;
+    if (made * 2 < runs.length) continue;
+    // Most runs' side wins; among those, the middling angle and place.
+    const lefts = place.filter((t) => t.side === 'left').length;
+    const side = lefts * 2 >= place.length ? 'left' : 'right';
+    const agreeing = place.filter((t) => t.side === side);
+    const angle = median(agreeing.map((t) => t.angle));
+    turns.push({ dist: median(agreeing.map((t) => t.dist)), angle, side, shape: angle >= 150 ? 'back' : angle >= 100 ? 'sharp' : 'turn', runs: made, of: runs.length });
+  }
+  return turns;
+}
+
 // ---------------------------------------------------------------- waits --
 
 /**
@@ -278,7 +364,14 @@ export function findPausePoints(route, runs, options) {
 function standingIn(route, fixes, options) {
   const o = { ...GUIDE_DEFAULTS, ...options };
   const profile = monotone(projectRecording(route, fixes, options));
+  // Progress along the route also stands still while a run is off it on
+  // some other street. A wait is standing: hardly moving on the ground.
+  const stoodStill = (stop) => {
+    const during = fixes.filter((f) => f.t >= stop.arrive - 1 && f.t <= stop.depart + 1);
+    return during.every((f) => haversine(during[0].lat, during[0].lon, f.lat, f.lon) <= o.standWithin);
+  };
   return findStops(profile, { ...options, stopSeconds: o.pauseSeconds })
+    .filter(stoodStill)
     .map((stop) => ({ dist: (stop.lo + stop.hi) / 2, wait: stop.depart - stop.arrive }))
     .filter((stop) => stop.dist >= o.endZone && stop.dist <= route.length - o.endZone);
 }
@@ -316,8 +409,9 @@ function gatherWaits(route, perRun, options) {
  * Everything past runs say about a route.
  *
  * @param {Array} recordings from parseGpx, all of the same route. The first
- *   one draws the route; recordings that do not follow it are left out and
- *   counted in `leftOut`.
+ *   one draws the route; recordings that do not follow it, or run it the
+ *   other way, are left out and counted in `leftOut`. groupRuns sorts a
+ *   mixed pile into routes and puts the best one to draw each first.
  * @param {Partial<typeof GUIDE_DEFAULTS>} [options]
  * @returns {{route:object, length:number, runs:number, leftOut:number,
  *   climb:object|null, turns:Array, pausePoints:Array, usualWait:number,
@@ -333,10 +427,10 @@ export function buildGuide(recordings, options) {
   if (!recordings.length) throw new Error('A route guide needs at least one recording of the route');
   const all = recordings.map((recording) => toFixes(recording));
   const route = buildRoute(all[0], options);
-  const runs = all.filter((fixes, i) => i === 0 || follows(route, fixes, o.offRoute));
+  const runs = all.filter((fixes, i) => i === 0 || follows(route, fixes, options));
 
   const climb = elevationAlong(route, runs, options);
-  const turns = findTurns(route, options);
+  const turns = agreedTurns(route, runs, options);
   const stood = runs.map((fixes) => standingIn(route, fixes, options));
   const pausePoints = gatherWaits(route, stood, options);
   const usualWait = pausePoints.reduce((sum, p) => sum + p.share * p.typical, 0);

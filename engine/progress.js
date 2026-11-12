@@ -31,6 +31,7 @@ export const PROGRESS_DEFAULTS = {
   startNear: null, // metres along the route to expect the first fix at; by default, wherever fits best from the start
   offRoute: 15, // metres from the route beyond which a fix may count as off it
   alongRoute: 0.8, // how closely travel must follow the route's direction (1 = exactly) to count as on it anyway
+  farOff: 50, // metres: beyond this from the route is off it even when travelling its way
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -69,6 +70,8 @@ function createFilter(route, options) {
     const heading = headingTo(fix.t, x, y);
     const isOff = (snap) => {
       if (snap.offset <= Math.max(o.offRoute, 3 * baseSigma)) return false;
+      // Further than a wide road is across, it is another street, whichever way it runs.
+      if (snap.offset > Math.max(o.farOff, 3 * baseSigma)) return true;
       const along = heading ? Math.abs(heading[0] * snap.dir[0] + heading[1] * snap.dir[1]) : 0;
       return along < o.alongRoute;
     };
@@ -155,8 +158,9 @@ export function createProgressTracker(route, options) {
  *
  * @param route from buildRoute
  * @param {Array<{t:number, lat:number, lon:number, accuracy?:number}>} fixes
- * @returns {{t:Float64Array, dist:Float64Array}} seconds on the recording's
- *   clock, and metres along the route at each of those times.
+ * @returns {{t:Float64Array, dist:Float64Array, off:Uint8Array}} seconds on
+ *   the recording's clock, and metres along the route at each of those
+ *   times. off: 1 where that fix was off the route, with progress held.
  */
 export function projectRecording(route, fixes, options) {
   const filter = createFilter(route, options);
@@ -170,7 +174,7 @@ export function projectRecording(route, fixes, options) {
 
   const { t, d } = smooth(steps);
   for (let k = 0; k < n; k++) d[k] = clamp(d[k], 0, route.length);
-  return { t, dist: d };
+  return { t, dist: d, off: Uint8Array.from(steps, (step) => (step.filt.offRoute ? 1 : 0)) };
 }
 
 /** The same profile with distance never going backwards, so each distance has one arrival time. */

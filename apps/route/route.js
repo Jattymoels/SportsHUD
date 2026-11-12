@@ -1,7 +1,7 @@
 // Route guide. Everything shown comes from engine/guide.js; this file loads
 // recordings, keeps track of where along the route you are looking, and draws.
 
-import { parseGpx, buildGuide, nextCue } from '../../engine/index.js';
+import { parseGpx, toFixes, buildRoute, buildGuide, groupRuns, nextCue } from '../../engine/index.js';
 import { clock } from '../ghost/hud.js';
 import { drawPreview, drawComing, describe, metres, wait } from './screen.js';
 
@@ -20,6 +20,7 @@ function svgEl(name, attrs = {}, parent = null, text = null) {
 
 const state = {
   pairs: [],
+  own: [], // routes found in the files you chose: [{ recordings, name, label }]
   guide: null,
   name: '',
   view: 'preview', // 'preview' before the start, 'coming' on the way
@@ -68,10 +69,31 @@ async function chooseFiles(input) {
       return;
     }
   }
+  // Sort them into routes: the same line the same way. Out and home are two.
+  let routes;
+  try {
+    routes = groupRuns(recordings);
+  } catch (error) {
+    showMessage(error.message);
+    return;
+  }
+  state.own = routes.map((members) => {
+    const runs = members.map((i) => recordings[i]);
+    const name = runs[0].name ?? 'Your route';
+    const length = buildRoute(toFixes(runs[0])).length;
+    return { recordings: runs, name, label: `${name}: ${km(length, 1)}, ${plural(runs.length, 'run')}` };
+  });
   const select = $('pick');
-  if (![...select.options].some((o) => o.value === 'custom')) select.add(new Option('Your files', 'custom'));
-  select.value = 'custom';
-  start(recordings, recordings[0].name ?? 'Your route');
+  for (const option of [...select.options]) if (option.value.startsWith('own:')) option.remove();
+  state.own.forEach((route, k) => select.add(new Option(`Yours · ${route.label}`, `own:${k}`)));
+  select.value = 'own:0';
+  startOwn(0);
+  if (state.own.length > 1) showMessage(`${plural(files.length, 'file')} sorted into ${state.own.length} routes; the one with most runs is shown. Pick another under "Route".`);
+}
+
+function startOwn(k) {
+  const route = state.own[k];
+  if (route) start(route.recordings, route.name);
 }
 
 function start(recordings, name) {
@@ -123,7 +145,8 @@ function renderSummary() {
   $('waitsSub').textContent = places.length ? `at ${plural(places.length, 'place')}${everyRun}` : 'no run stood still for 5 s or more';
   const sharp = g.turns.filter((t) => t.shape !== 'turn').length;
   $('turns').textContent = String(g.turns.length);
-  $('turnsSub').textContent = g.turns.length ? `${g.turns.filter((t) => t.side === 'left').length} left, ${g.turns.filter((t) => t.side === 'right').length} right${sharp ? `, ${sharp} sharp` : ''}` : 'no corners of 45° or more';
+  const agreed = g.runs >= 3 ? '; made on at least half the runs' : '';
+  $('turnsSub').textContent = g.turns.length ? `${g.turns.filter((t) => t.side === 'left').length} left, ${g.turns.filter((t) => t.side === 'right').length} right${sharp ? `, ${sharp} sharp` : ''}${agreed}` : 'no corners of 45° or more';
   $('caveat').textContent =
     g.runs < 3
       ? `From ${plural(g.runs, 'run')}, a wait is only known to have happened, not how likely it is. More runs of the same route sharpen it.`
@@ -274,7 +297,7 @@ function hideTip() {
 function inWords(f) {
   if (f.kind === 'turn') {
     if (f.shape === 'back') return { what: 'Turn back', detail: `round to the ${f.side}` };
-    return { what: `${f.shape === 'sharp' ? 'Sharp ' : ''}${f.side} turn`.replace(/^./, (c) => c.toUpperCase()), detail: `${Math.round(f.angle)}°` };
+    return { what: `${f.shape === 'sharp' ? 'Sharp ' : ''}${f.side} turn`.replace(/^./, (c) => c.toUpperCase()), detail: `${Math.round(f.angle)}°${f.of > 1 ? `; on ${f.runs} of ${f.of} runs` : ''}` };
   }
   if (f.kind === 'wait') {
     const often = f.of > 1 ? `${f.runs} of ${f.of} runs waited` : 'the run waited';
@@ -406,7 +429,9 @@ async function init() {
   $('screen').addEventListener('click', () => goTo(state.along, state.view === 'preview' ? 'coming' : 'preview'));
   $('along').addEventListener('input', (event) => goTo(Number(event.target.value), 'coming'));
   $('pick').addEventListener('change', (event) => {
-    if (event.target.value !== 'custom') loadPair(event.target.value);
+    const { value } = event.target;
+    if (value.startsWith('own:')) startOwn(Number(value.slice(4)));
+    else loadPair(value);
   });
   $('files').addEventListener('change', (event) => chooseFiles(event.target));
   document.addEventListener('keydown', onKey);

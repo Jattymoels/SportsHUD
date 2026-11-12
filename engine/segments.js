@@ -30,6 +30,7 @@ export const SEGMENT_DEFAULTS = {
   joinSeconds: 4, // on it for this long before its ghost takes over
   leaveSeconds: 8, // off it for this long before it is let go of altogether
   offRoute: 10, // metres off it, and not travelling along it, before the set pace takes over
+  patience: 1, // seconds it must stay off before the set pace takes over: one stray fix is not leaving
 };
 
 const M_PER_DEG = 111195;
@@ -137,7 +138,8 @@ export function createSegmentTracker({ secondsPerKm, tracks }, options) {
         if (!p.offRoute || clock.read(fix.t).paused) live.lostSince = null;
         else live.lostSince ??= fix.t;
         const gone = (live.lostSince != null && fix.t - live.lostSince >= o.leaveSeconds) || p.dist >= tracks[live.index].route.length - 5;
-        race(!p.offRoute && !gone, fix.t);
+        const away = live.lostSince != null && fix.t - live.lostSince >= o.patience;
+        race(!away && !gone, fix.t);
         if (gone) live = null;
         if (onTrack) {
           fits.fill(null);

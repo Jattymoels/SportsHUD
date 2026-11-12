@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildRoute, buildGuide, elevationAlong, upsAndDowns, findTurns, findPausePoints, distanceMarkers, upcoming, nextCue, parseGpx } from '../index.js';
+import { buildRoute, buildGuide, groupRuns, elevationAlong, upsAndDowns, findTurns, agreedTurns, findPausePoints, distanceMarkers, upcoming, nextCue, parseGpx } from '../index.js';
 import { SCENARIOS, terrain } from '../../fixtures/generate.mjs';
 import { path, steady, recording, noise } from './helpers.js';
 
@@ -251,4 +251,74 @@ test('the synthetic run: its climb, its turnaround and the crossing both efforts
   assert.deepEqual([crossing.runs, crossing.of], [2, 2]);
   near(crossing.longest, 45, 6);
   near(crossing.typical, 32.5, 6);
+});
+
+// ------------------------------------------------- many runs of a route --
+
+test('the same streets run the other way are a different route', () => {
+  const out = recording(steady(kilometre, 3));
+  const home = recording(steady([...kilometre].reverse(), 3));
+  const guide = buildGuide([out, home, recording(runWithStops(kilometre, [{ at: 500, seconds: 15 }]))]);
+  assert.equal(guide.runs, 2, 'the run home is not a run of the route out');
+  assert.equal(guide.leftOut, 1);
+  // A run of only the first third is not a run of the route either.
+  assert.equal(buildGuide([out, recording(steady(path([[0, 0], [330, 0]]), 3))]).leftOut, 1);
+});
+
+test('a pile of recordings is sorted into routes, the one with most runs first', () => {
+  const corner = path([[0, 0], [600, 0], [600, 400]]);
+  const back = [...corner].reverse();
+  // A longer way round the same corner: 40 m up a side street and back.
+  const detour = path([[0, 0], [300, 0], [300, 40], [300, 0], [600, 0], [600, 400]]);
+  const pile = [
+    recording(steady(back, 3)), // 0: the way home
+    recording(steady(detour, 3)), // 1: the way out, with a detour
+    recording(steady(corner, 3.2)), // 2: the way out
+    recording(steady(back, 2.8)), // 3: the way home
+    recording(steady(corner, 2.9)), // 4: the way out
+    recording(steady(path([[0, 900], [800, 900]]), 3)), // 5: somewhere else
+  ];
+  const routes = groupRuns(pile);
+  assert.deepEqual(routes.map((r) => [...r].sort()), [[1, 2, 4], [0, 3], [5]]);
+  // The run to draw the route out is one of the plain ones, not the detour.
+  assert.ok(routes[0][0] === 2 || routes[0][0] === 4, `drawn by run ${routes[0][0]}`);
+});
+
+test('with three or more runs, a turn only one of them made is not a turn of the route', () => {
+  const corner = path([[0, 0], [600, 0], [600, 400]]);
+  // One run crosses the road and comes back half-way along: two sharp corners of its own.
+  const wander = path([[0, 0], [300, 0], [300, 25], [330, 25], [330, 0], [600, 0], [600, 400]]);
+  const runs = [steady(wander, 3), steady(corner, 3), steady(corner, 3.1)];
+  const route = buildRoute(runs[0]);
+  assert.ok(findTurns(route).length > 1, 'the wandering run has turns of its own');
+  const turns = agreedTurns(route, runs);
+  assert.equal(turns.length, 1);
+  assert.deepEqual([turns[0].side, turns[0].shape, turns[0].runs, turns[0].of], ['left', 'turn', 3, 3]);
+  // Placed on the wandering run's own line, where the corner comes 50 m later.
+  near(turns[0].dist, 650, 12);
+  // With only two runs there is nothing to outvote the first one's line.
+  assert.equal(agreedTurns(route, runs.slice(0, 2)).length, findTurns(route).length);
+  // And the guide uses the agreed turns.
+  assert.equal(buildGuide(runs.map((fixes) => recording(fixes))).turns.length, 1);
+});
+
+test('a run that takes another street for a while has not waited there', () => {
+  // Three runs of a street. One goes round by the next street over, 80 m
+  // away, for 300 m: its progress along the route stands still meanwhile,
+  // but it was moving the whole time.
+  const street = path([[0, 0], [900, 0]]);
+  const roundabout = path([[0, 0], [200, 0], [200, 80], [500, 80], [500, 0], [900, 0]]);
+  const up = (x) => 10 + x / 50; // the street rises 18 m; the other street is taken to be 30 m higher
+  const plain = (speed) => { const fixes = steady(street, speed); return fixes.map((f) => ({ ...f, ele: up(f.t * speed) })); };
+  const detour = steady(roundabout, 3).map((f) => {
+    const d = f.t * 3; // metres along its own way: on the other street from 280 m to 580 m
+    const x = d < 200 ? d : d < 280 ? 200 : d < 580 ? 200 + (d - 280) : d < 660 ? 500 : 500 + (d - 660);
+    return { ...f, ele: up(x) + (d > 280 && d < 580 ? 30 : 0) };
+  });
+  const route = buildRoute(street);
+  assert.deepEqual(findPausePoints(route, [detour, plain(3), plain(3.1)]), []);
+  // And the height of that other street is not mixed into this one's.
+  const climb = elevationAlong(route, [plain(3), detour, plain(3.1)]);
+  near(climb.highest, 28, 1.5, 'highest point');
+  near(climb.gain, 18, 2, 'climb');
 });

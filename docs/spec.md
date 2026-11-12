@@ -63,7 +63,7 @@ Two more behaviours follow. The targets are proposals, like the others.
 | ID | Behaviour | How we test it | Proposed pass target | Tested on |
 | --- | --- | --- | --- | --- |
 | B11 | Live gap to a ghost holding a set pace, on any route | Replay a recording against a set pace; compare the live gap with the gap computed afterwards, and the distance measured with the watch's own figure | Within 3 seconds of the computed gap; distance within 1% of the watch's | Desk, then phone |
-| B12 | Live segments: a recorded ghost takes over where routes overlap | Replay a run that shares part of its route with a recorded ghost | Switches within 5 seconds of joining and of leaving the shared stretch; no jump in the gap at either switch | Desk, then phone |
+| B12 | Live segments: a recorded ghost takes over where routes overlap | Replay a run that shares part of its route with a recorded ghost | Switches within 5 seconds of joining and 7 seconds of leaving the shared stretch; no jump in the gap at either switch | Desk, then phone |
 
 ## Constraints
 

@@ -7,6 +7,7 @@
 
 import { pointAtDistance } from '../../engine/index.js';
 import { ghostGlyph, drawRun, clock, pace, INK, AHEAD, BEHIND, FONT } from '../ghost/hud.js';
+import { describe, metres } from '../route/screen.js';
 
 const RAD = Math.PI / 180;
 const EYE = 1.6; // metres above the ground
@@ -57,6 +58,12 @@ function ahead(from, to, reach) {
  * @param {'anchored'|'square'} v.style what the glasses draw
  * @param {{w:number, h:number}|null} v.display degrees of view the display covers; null for all of it
  * @param {number} v.markerEvery metres between distance markers
+ * @param {Array<{kind:string, dist:number}>} [v.features] turns, likely waits
+ *   and climbs along the route, from the engine's route guide; a sign is
+ *   placed in the world at each
+ * @param {{now:object|null, then:object|null}} [v.cue] the next thing to act
+ *   on, from the engine's nextCue; named at the top of the display while it
+ *   is within 400 m, since a sign that far off is too small to read
  * @param {number} [v.fov] degrees the picture spans, left to right
  * @param {number} [v.pitch] radians the gaze is above the horizon
  * @param {number} [v.roll] radians the view is tilted clockwise
@@ -240,6 +247,57 @@ export function drawScene(ctx, W, H, route, v) {
       ctx.globalAlpha = 1;
     }
 
+    // A sign at each thing the route guide knows about: chevrons across the
+    // path at a turn, a pause mark beside it where runs tend to wait, a
+    // slope at the foot of a climb.
+    for (const f of v.features ?? []) {
+      const away = f.dist - v.dist;
+      if (away < 2 || away > 320) continue;
+      const c = steady(route, f.dist);
+      const b = steady(route, Math.max(0, f.dist - 8)); // the way in
+      const len = Math.hypot(c.x - b.x, c.y - b.y) || 1;
+      const nx = (c.y - b.y) / len; // to the right of the way in
+      const ny = -(c.x - b.x) / len;
+      const at = (s, z) => project(c.x + nx * s, c.y + ny * s, z);
+      const shape = (points, width) => {
+        if (points.some((p) => !p)) return false;
+        ctx.lineWidth = Math.max(2 * u, (width * focal) / points[0].depth);
+        ctx.beginPath();
+        points.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        ctx.stroke();
+        return true;
+      };
+      let label = null;
+      let top = null;
+      let tint = GUIDE;
+      if (f.kind === 'turn') {
+        const way = f.side === 'left' ? -1 : 1;
+        ctx.strokeStyle = GUIDE;
+        for (const k of [-1, 0, 1]) shape([at(k * 0.95 - way * 0.3, 1.92), at(k * 0.95 + way * 0.3, 1.5), at(k * 0.95 - way * 0.3, 1.08)], 0.1);
+        label = f.shape === 'back' ? 'TURN BACK' : `${f.shape === 'sharp' ? 'SHARP ' : ''}${f.side.toUpperCase()}`;
+        top = at(0, 2.2);
+      } else if (f.kind === 'wait') {
+        tint = BEHIND;
+        ctx.strokeStyle = BEHIND;
+        shape([at(2.4, 0), at(2.4, 1.15)], 0.04);
+        shape([at(2.18, 1.3), at(2.18, 2.1)], 0.13);
+        shape([at(2.62, 1.3), at(2.62, 2.1)], 0.13);
+        label = `WAIT ~${f.typical < 90 ? `${Math.max(5, Math.round(f.typical / 5) * 5)} s` : clock(Math.round(f.typical))}`;
+        top = at(2.4, 2.3);
+      } else if (f.kind === 'climb') {
+        tint = MARKER;
+        ctx.strokeStyle = MARKER;
+        shape([at(-3.2, 1.2), at(-1.8, 1.2), at(-1.8, 2.0), at(-3.2, 1.2)], 0.07);
+        label = `CLIMB +${Math.round(f.gain)} m`;
+        top = at(-2.5, 2.2);
+      }
+      // Words only once it is close: further off, signs sit on top of one
+      // another and nothing could be read. The cue at the top covers those.
+      if (!label || !top || away > 40) continue;
+      const size = Math.max(13 * u, Math.min(44 * u, (0.6 * focal) / top.depth));
+      write(label, top.x, top.y - size * 0.45, size, { fill: tint });
+    }
+
     // The ghost, standing on the path where it is.
     const lead = v.ghostDist == null ? null : v.ghostDist - v.dist; // metres the ghost is ahead of you
     if (lead != null && lead > 1.2) {
@@ -277,7 +335,15 @@ export function drawScene(ctx, W, H, route, v) {
     write(number, box.x + box.w - 12 * u, floor, big, { fill: color, align: 'right', weight: 700 });
     write(v.speed > 0.4 ? `${pace(1000 / v.speed)} /km` : '–:–– /km', box.x + 12 * u, floor, big * 0.5, { align: 'left', weight: 500 });
     if (v.paused) write('PAUSED', W / 2, box.y + big * 0.7, big * 0.5, {});
-    else if (lead != null && lead < -1.2) write(`▼ ghost ${Math.round(-lead)} m behind`, W / 2, floor - big * 1.2, big * 0.5, { fill: color });
+    else if (v.cue?.now && v.cue.now.in <= 400) {
+      // The next thing to act on, named at the top of the display.
+      const { now, then } = v.cue;
+      const arrow = now.kind !== 'turn' ? ['', ''] : now.side === 'left' ? ['◀ ', ''] : ['', ' ▶'];
+      write(`${arrow[0]}${describe(now).title}${arrow[1]}  ${metres(now.in)}`, W / 2, box.y + big * 0.75, big * 0.55, { fill: now.kind === 'wait' ? BEHIND : INK, weight: 700 });
+      const more = then && then.in - now.in <= 150 ? `then ${describe(then).title} ${metres(then.in)}` : describe(now).detail;
+      if (more) write(more, W / 2, box.y + big * 1.3, big * 0.36, { weight: 400 });
+    }
+    if (!v.paused && lead != null && lead < -1.2) write(`▼ ghost ${Math.round(-lead)} m behind`, W / 2, floor - big * 1.2, big * 0.5, { fill: color });
     }
   }
   ctx.restore();

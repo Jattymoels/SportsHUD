@@ -15,12 +15,13 @@ Build 1 of the spec: the track engine and a desk replay harness.
 | `apps/ghost/` | Ghost run, the first prototype of the race screen: a 600×600 display driven by the arrow keys and Enter, that races a pace or a past run using live GPS. Made to be tried on a phone, standing in for the glasses. |
 | `apps/probe/` | The anchoring probe: the route, its markers and the ghost placed over a phone's camera picture, using only GPS and the compass. The nearest thing to glasses that place things in the world, and a first measure of how far off the placing is. |
 | `apps/preview/` | Through the glasses: a recorded run from the runner's eyes, with the ghost and distance markers placed in the world along the route. A preview of where the product is heading, with a switch to the heads-up square that today's display can show. Desk tool. |
+| `apps/route/` | The route guide, as far as past runs alone can take it: the route's length, climb, turns and usual waiting places, as a pre-start screen and as cues on the way. No map data yet, so no water or toilets. |
 | `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to any kind of ghost. |
 | `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. One pair is two different runs that share 800 m of road, for live segments. |
 | `tools/` | A small local web server and a command-line report for B1 and B12. |
 | `docs/` | The spec and research notes. |
 
-The other apps in the spec (`apps/route/`, `apps/golf/`) come with builds 4 and 5.
+The golf app in the spec (`apps/golf/`) comes with build 5.
 
 ## Running it
 
@@ -144,6 +145,21 @@ The two kinds of ghost combine. You run wherever you like against a ghost holdin
 **In the harness,** choose "Run sharing part of the route (synthetic)", or set "Ghost" to "Live segments" with two files of your own. The map shows the ghost's route under yours, and the chart is shaded where the recording was being raced.
 
 Not built yet: live segments in Ghost run on the phone. It needs a way to pick which saved runs to carry along, and it has not been tried outdoors.
+
+## The route guide
+
+Past runs of a route say a good deal about it without any map. `buildGuide` in `engine/guide.js` takes one or more recordings of the same route and returns everything placed in metres along it:
+
+- **Climb.** From the elevation a watch saves with each point. Readings from every run are averaged along the route and smoothed over 100 m. A rise or fall only counts once it reaches 2 m between turning points, because adding up every small step over-counts climb the same way adding up every GPS fix over-counts distance. A climb is called out where the ground rises at 2% or more and gains at least 8 m.
+- **Turns.** Where the direction of the route changes by 45° or more, taken over 20 m either side so that a gentle bend and the wobble of a GPS line do not count. Each has a side, an angle, and whether it is sharp or doubles back.
+- **Likely waits.** Where a run stood still for 5 seconds or more, or the watch paused itself. Waits on different runs within 40 m are the same place, and each place records how many of the runs waited there and for how long. On a city route these are mostly traffic lights. Two runs only show that a wait happened; it takes more runs of the same route to say how likely one is.
+- **Distance markers** every 500 m, and the finish.
+
+`nextCue` answers "what should the display say now?" for any point on the route: the next thing to act on and the one after, with a distance marker stepping in only when nothing else is close.
+
+`apps/route/` shows the result two ways: the pre-start screen the glasses would show (the route's shape, distance, climb, usual time, expected waiting) and the cue screen on the way. Below those are the height profile and the full list. Load several GPX files of one route to see your own; the first file, in name order, draws the route's line, so its detours become the route's. The same turns, waits and climbs appear as signs in `apps/preview/`.
+
+Not built yet: water and toilets, which need map data (B6 in the spec); cues during a live run on the phone; and a route line agreed between several runs rather than taken from one.
 
 ## Deployment
 

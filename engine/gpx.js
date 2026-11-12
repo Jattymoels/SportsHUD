@@ -82,7 +82,8 @@ export function parseGpx(xml) {
  * are dropped. Throws if the recording has no timestamps, because a ghost
  * without times cannot be raced.
  *
- * @returns {Array<{t:number, lat:number, lon:number}>}
+ * @returns {Array<{t:number, lat:number, lon:number, ele?:number}>} `ele`,
+ *   metres above sea level, only where the recording has it.
  */
 export function toFixes(recording) {
   const timed = recording.points.filter((p) => p.time != null);
@@ -95,7 +96,9 @@ export function toFixes(recording) {
   for (const p of timed) {
     if (p.time <= last) continue;
     last = p.time;
-    fixes.push({ t: (p.time - t0) / 1000, lat: p.lat, lon: p.lon });
+    const fix = { t: (p.time - t0) / 1000, lat: p.lat, lon: p.lon };
+    if (p.ele != null) fix.ele = p.ele;
+    fixes.push(fix);
   }
   return fixes;
 }

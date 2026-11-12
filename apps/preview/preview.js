@@ -9,6 +9,8 @@ import {
   distAtTime,
   checkB1,
   checkPace,
+  buildGuide,
+  nextCue,
 } from '../../engine/index.js';
 import { drawScene, steady, VIEW_FOV } from './scene.js';
 import { clock } from '../ghost/hud.js';
@@ -96,6 +98,16 @@ function start(ghostRecording, runnerRecording) {
   }
   showMessage(null);
   state.loaded = { ghost: ghostRecording, runner: runnerRecording };
+  // What the two recordings say about the route: its turns, where they
+  // waited, its climbs. The recording that draws the path goes first.
+  const pathFirst = $('ghostMode').value === 'pace' ? [runnerRecording, ghostRecording] : [ghostRecording, runnerRecording];
+  try {
+    state.run.guide = buildGuide(pathFirst.filter(Boolean));
+    state.run.features = state.run.guide.features.filter((f) => ['turn', 'wait', 'climb'].includes(f.kind));
+  } catch {
+    state.run.guide = null;
+    state.run.features = [];
+  }
   state.time = 0;
   state.gaze = null;
   state.look = 0;
@@ -189,6 +201,8 @@ function frame(now) {
       style: $('style').value,
       display: display && { w: display[0], h: display[1] },
       markerEvery: 500,
+      features: $('guide').checked ? state.run.features : [],
+      cue: $('guide').checked && state.run.guide ? nextCue(state.run.guide, r.dist) : null,
     });
     $('scrub').value = Math.floor(state.time);
     $('clock').textContent = `${clock(state.time)} / ${clock(state.run.duration)}`;
@@ -201,7 +215,7 @@ function caption() {
   const anchored = $('style').value === 'anchored';
   const small = $('display').value === '14,14';
   $('caption').textContent = anchored
-    ? `The ghost, the line and the distance gates are placed in the world: turn your head and they stay where they are. This is the direction, and needs glasses that know where the road is.${small ? ' At this size most of it falls outside the display, which is why the arrows at its edge matter.' : ''}`
+    ? `The ghost, the line, the distance gates and the signs for turns, waits and climbs are placed in the world: turn your head and they stay where they are. This is the direction, and needs glasses that know where the road is.${small ? ' At this size most of it falls outside the display, which is why the arrows at its edge matter.' : ''}`
     : 'A heads-up square: it stays fixed in your view as you turn your head. This is what today\'s Ray-Ban Display can show.';
 }
 

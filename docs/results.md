@@ -42,7 +42,7 @@ Things a product needs that are not behaviours in the spec, and where each stand
 | Opens from the home screen | Built. Checked at the desk that the browser is given what it asks for; not installed on a phone |
 | Works with no signal | Built. At the desk, after one visit and with the server taken away, all seven pages load and a sample run plays |
 | Runs survive a lost or cleared phone | One file backs up every run and loads into another browser. Checked at the desk |
-| Keeps running with the phone locked | Not possible for a web page. Needs the app on the glasses, or a small native app on the phone |
+| Keeps running with the phone locked | Not possible for a page in a phone's browser. On the Meta pair the page runs on the glasses and the phone supplies position from a pocket, which most likely works locked: unconfirmed until tried on a pair. Glasses driven from a phone app of ours would need that app to be native |
 
 ## Not yet known
 

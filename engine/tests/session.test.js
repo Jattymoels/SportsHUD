@@ -185,3 +185,32 @@ test('starting part-way along the ghost\'s route races it from there', () => {
   near(b[60].timeGap, 0, 2.5, 'with one, level from where the runner joined');
   assert.equal(b[60].racing, 'recording');
 });
+
+test('a pace ghost carrying saved runs: each takes over on its own route, on any run', () => {
+  // Two saved runs: the street east (at 3.3 m/s), and an avenue going north from its 600 m mark (at 2.7 m/s).
+  const avenue = ghostFromFixes(steady(path([[600, 0], [600, 500]]), 2.7), []);
+  const session = createRunSession({
+    ghost: { kind: 'pace', secondsPerKm: 1000 / 3, tracks: [{ route: past.route, profile: past.ghost }, { route: avenue.route, profile: avenue.ghost }] },
+    clock: 'elapsed',
+  });
+  // Today: in from the south, east along the street from 200 m to 600 m, then north up the avenue, all at 3 m/s.
+  const r = readings(session, steady(path([[200, -150], [200, 0], [600, 0], [600, 400]]), 3));
+  // Up the side street: the pace ghost, level.
+  assert.deepEqual([r[40].racing, r[40].track, r[40].routeDist], ['pace', null, null]);
+  near(r[40].timeGap, 0, 1);
+  // On the street (from 50 s to 183 s): the first saved run, which was faster.
+  assert.deepEqual([r[120].racing, r[120].track], ['recording', 0]);
+  near(r[120].routeDist, 200 + (120 - 50) * 3, 5);
+  assert.ok(r[170].timeGap < -8, `losing to the faster run: ${r[170].timeGap.toFixed(1)} s`);
+  // Up the avenue (from 183 s): the second saved run, which was slower, so the gap comes back.
+  const late = r.at(-10);
+  assert.deepEqual([late.racing, late.track], ['recording', 1]);
+  assert.ok(late.timeGap > r[185].timeGap + 8, `gaining on the slower run: from ${r[185].timeGap.toFixed(1)} to ${late.timeGap.toFixed(1)} s`);
+  // Nothing jumped at any change, it never "finishes", and it is never "off route".
+  const biggest = Math.max(...r.slice(1).map((x, i) => Math.abs(x.timeGap - r[i].timeGap)));
+  assert.ok(biggest < 1, `biggest change in one second ${biggest.toFixed(2)} s`);
+  assert.ok(r.every((x) => !x.finished && !x.offRoute));
+  // With no saved runs it is a plain pace ghost.
+  const alone = readings(createRunSession({ ghost: { kind: 'pace', secondsPerKm: 1000 / 3, tracks: [] }, clock: 'elapsed' }), steady(street, 3));
+  assert.ok(alone.every((x) => x.racing === 'pace' && x.track === null));
+});

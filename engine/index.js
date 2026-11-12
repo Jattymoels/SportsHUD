@@ -24,7 +24,8 @@ export {
   gapSeriesAfterwards,
   compareGapSeries,
 } from './gap.js';
-export { speedOfPace, paceOf, paceGapAt, createPaceTracker, paceSeriesAfterwards } from './pace.js';
+export { speedOfPace, paceOf, paceProfile, paceGapAt, createPaceTracker, paceSeriesAfterwards } from './pace.js';
+export { angleBetween, cameraPose } from './orientation.js';
 export { AUTOPAUSE_DEFAULTS, createAutoPause } from './autopause.js';
 export { createRunSession } from './session.js';
 export { fillGaps, createReplay, checkB1, checkPace } from './replay.js';

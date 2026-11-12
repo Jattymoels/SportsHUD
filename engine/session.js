@@ -59,6 +59,8 @@ export function createRunSession({ ghost, clock = 'moving', splitEvery = 1000, o
       distGap: gap.distGap, // metres; positive is ahead of the ghost
       offRoute: gap.offRoute ?? false, // racing a recording, and away from its route
       finished: gap.finished, // racing a recording, and reached its end
+      routeDist: ghost.kind === 'track' ? gap.dist : null, // metres along the ghost's route
+      ghostDist: gap.ghostDist, // metres the ghost has covered (along its route, if it has one)
       fixAge: own.fixAge,
       accuracy: fixes[fixes.length - 1].accuracy ?? null,
       splits,
@@ -94,7 +96,8 @@ export function createRunSession({ ghost, clock = 'moving', splitEvery = 1000, o
     /**
      * The reading for a display at elapsed time `t`; null before the first fix.
      * @returns {{t:number, time:number, paused:boolean, distance:number, speed:number, timeGap:number,
-     *   distGap:number, offRoute:boolean, finished:boolean, fixAge:number, accuracy:number|null, splits:Array}|null}
+     *   distGap:number, offRoute:boolean, finished:boolean, routeDist:number|null, ghostDist:number,
+     *   fixAge:number, accuracy:number|null, splits:Array}|null}
      */
     at,
     /**

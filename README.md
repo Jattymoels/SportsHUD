@@ -56,7 +56,9 @@ Open `apps/ghost/` on the phone, outdoors, and allow location.
 3. Stop at a light and the clock stops with you. Set off and it starts again.
 4. Tap for the menu to finish. The run is saved on the phone and becomes a ghost for next time.
 
-Swipes are the arrow keys and a tap is Enter, which is all the glasses have. Keep the page open and the screen on: a phone that locks stops reporting where it is. Runs are kept in the browser's storage on that device, the latest eight, and nowhere else. "Download my latest run" saves one as GPX.
+Swipes are the arrow keys and a tap is Enter, which is all the glasses have. Keep the page open and the screen on: a phone that locks stops reporting where it is. A run in progress is written down every ten seconds, so if the page reloads or the phone drops it, the first row on the way back in is "Carry on the run in progress", for half an hour. The time away counts on the clock, and the distance across it is taken as a straight line. Runs are kept in the browser's storage on that device, the latest eight, and nowhere else. "Download my latest run" saves one as GPX.
+
+Choosing the pace ghost brings your saved runs along. You run wherever you like against the pace; wherever your way joins the route of a saved run, in the same direction, that run's ghost takes over, a line across the road says so, and the gap carries on. When the routes part, the pace ghost takes back over. Where two saved runs cover the same ground, the more recent is used.
 
 Racing a saved run does not need you to stay on its route. Wherever you are off it (another street for a few blocks, a start part-way along, a different finish) a ghost holding that run's average pace stands in, the screen says OFF ROUTE and names the stand-in, and the gap carries on when the saved run's ghost takes over again. While you are on its route, the next turn or likely wait within 200 m is named under the clock and marked on the road. Those come from the route guide, built from that run and any other saved runs of the same route.
 
@@ -148,7 +150,7 @@ The two kinds of ghost combine. You run wherever you like against a ghost holdin
 
 **In the harness,** choose "Run sharing part of the route (synthetic)", or set "Ghost" to "Live segments" with two files of your own. The map shows the ghost's route under yours, and the chart is shaded where the recording was being raced.
 
-**On the phone,** Ghost run races a saved run this way, with that run's average pace as the set pace. Not built yet: carrying several saved runs along on any route, which needs a way to pick them. None of it has been tried outdoors.
+**On the phone,** Ghost run uses this both ways round: the pace ghost carries every saved run along and hands over to whichever one you join, and a saved run raced on its own route has its average pace standing in wherever you leave it. None of it has been tried outdoors.
 
 ## The route guide
 

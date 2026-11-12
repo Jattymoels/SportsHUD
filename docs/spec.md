@@ -56,7 +56,7 @@ The ghost does not have to be a recording of the route being run:
 | A friend's run or a personal best on the same route | Racing | Replays the recording, as in B1 |
 | A past run carried onto a different route | Its ups and downs no longer line up with anything there | Falls back to a set pace: that run's average |
 
-**Live segments.** Where the route being run overlaps a stretch that a recorded ghost has run, in the same direction, that stretch switches to the recording's own pacing, and the set pace covers everything else. The gap carries on through each switch rather than jumping (agreed 2026-11-12). Built in the engine and the desk harness, and used by the phone app whenever a saved run is raced: off that run's route, a ghost at its average pace stands in. Which recording wins where two overlap is left for later: for now, the first in the list.
+**Live segments.** Where the route being run overlaps a stretch that a recorded ghost has run, in the same direction, that stretch switches to the recording's own pacing, and the set pace covers everything else. The gap carries on through each switch rather than jumping (agreed 2026-11-12). Built in the engine and the desk harness, and used by the phone app both ways round: the pace ghost carries every saved run along and hands over to whichever one the runner joins, and a saved run raced on its own route has a ghost at its average pace standing in wherever the runner leaves it. Which recording wins where two overlap is left for later: for now, the first in the list.
 
 Two more behaviours follow. The targets are proposals, like the others.
 

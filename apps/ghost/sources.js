@@ -19,8 +19,9 @@ export function liveSource(onFix, onError) {
     close() {
       if (watch != null) navigator.geolocation.clearWatch(watch);
     },
-    begin() {
-      began = performance.now();
+    /** Start the run's clock; `already` seconds in, when carrying on a run begun earlier. */
+    begin(already = 0) {
+      began = performance.now() - already * 1000;
     },
     elapsed: () => (performance.now() - began) / 1000,
   };
@@ -42,8 +43,8 @@ export function demoSource(fixes, speed, onFix) {
     close() {
       clearInterval(timer);
     },
-    begin() {
-      began = performance.now();
+    begin(already = 0) {
+      began = performance.now() - (already * 1000) / speed;
     },
     elapsed,
     ended: () => began != null && next >= fixes.length,

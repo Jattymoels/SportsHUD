@@ -8,7 +8,7 @@
 import { toGpx, haversine, ghostFromFixes, createRunSession, groupFixes, guideFromRuns, nextCue } from '../../engine/index.js';
 import { describe, metres, wait } from '../route/screen.js';
 import { SIZE, drawRun, drawList, drawMenu, drawCard, clock, pace, km } from './hud.js';
-import { loadRuns, saveRuns, loadSettings, saveSettings, storedRun, fixesOf, runFromGpx, loadSample } from './store.js';
+import { loadRuns, saveRuns, loadSettings, saveSettings, storedRun, fixesOf, runFromGpx, loadSample, saveProgress, loadProgress, clearProgress } from './store.js';
 import { liveSource, demoSource } from './sources.js';
 
 const $ = (id) => document.getElementById(id);
@@ -35,6 +35,10 @@ const state = {
   lastFix: null, // latest position, with `at` (ms) when it arrived
   gpsError: null,
   demo: null, // { fixes, speed } when replaying a sample run
+  progress: null, // a run left in progress by a reload, offered on the home screen
+  row: null, // which home row the ghost was chosen from, to choose it again when carrying on
+  savedAt: 0, // when the run in progress was last written down, ms
+  racing: null, // which ghost was in charge at the last reading: 'pace', or a recording's place in the list
 };
 
 const dateLabel = (ms) => new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -71,7 +75,19 @@ async function keepAwake() {
 // ------------------------------------------------------------ home screen --
 
 function homeRows() {
-  const rows = [{ id: 'pace', main: `Pace  ${pace(state.settings.secondsPerKm)} /km`, detail: 'A ghost holding this pace, on any route', adjustable: true }];
+  const rows = [];
+  if (state.progress) {
+    const p = state.progress;
+    const ago = Math.max(0, Math.round((Date.now() - p.savedAt) / 60000));
+    rows.push({ id: 'resume', main: 'Carry on the run in progress', detail: `${clock(p.elapsed)} in, left ${ago < 1 ? 'a moment' : `${ago} min`} ago · starting another run drops it` });
+  }
+  const others = state.runs.length;
+  rows.push({
+    id: 'pace',
+    main: `Pace  ${pace(state.settings.secondsPerKm)} /km`,
+    detail: others ? `On any route · your ${others === 1 ? 'saved run takes' : `${others} saved runs take`} over on their own routes` : 'A ghost holding this pace, on any route',
+    adjustable: true,
+  });
   for (const run of state.runs) {
     rows.push({
       id: run.id,
@@ -89,9 +105,21 @@ function homeRows() {
 }
 
 function chooseGhost(row) {
+  state.row = row.id;
   if (row.id === 'pace') {
     const label = `${pace(state.settings.secondsPerKm)} /km`;
-    state.ghost = { kind: 'pace', secondsPerKm: state.settings.secondsPerKm, label: `ghost ${label}`, title: `A ghost holding ${label}` };
+    // Every saved run comes along: where today's way joins one of their
+    // routes, that run's ghost takes over until the routes part.
+    const carried = [];
+    for (const run of state.runs) {
+      try {
+        const { route, ghost } = ghostFromFixes(fixesOf(run), state.settings.clock === 'moving' ? run.pauses : []);
+        carried.push({ route, profile: ghost, run, label: `ghost ${run.demo ? 'sample run' : dateLabel(run.startedAt)}`, guide: undefined });
+      } catch {
+        // A saved run that cannot be laid out is left behind.
+      }
+    }
+    state.ghost = { kind: 'pace', secondsPerKm: state.settings.secondsPerKm, tracks: carried, label: `ghost ${label}`, title: `A ghost holding ${label}` };
   } else {
     const run = state.runs.find((r) => r.id === row.id);
     const fixes = fixesOf(run);
@@ -109,6 +137,21 @@ function chooseGhost(row) {
     };
   }
   state.screen = 'ready';
+}
+
+/** The route guide for whichever recording is the ghost right now; built the first time it is needed. */
+function guideNow(r) {
+  if (state.ghost.kind === 'track') return state.ghost.guide;
+  const carried = r.track == null ? null : state.ghost.tracks?.[r.track];
+  if (!carried) return null;
+  if (carried.guide === undefined) carried.guide = routeGuide(carried.run);
+  return carried.guide;
+}
+
+/** What to call the ghost in charge right now. */
+function ghostLabelNow(r) {
+  if (state.ghost.kind === 'track') return r.racing === 'pace' ? state.ghost.standInLabel : state.ghost.label;
+  return r.racing === 'recording' ? (state.ghost.tracks?.[r.track]?.label ?? state.ghost.label) : state.ghost.label;
 }
 
 /**
@@ -137,6 +180,10 @@ function startRun() {
   state.history = [];
   state.banner = null;
   state.side = 0;
+  state.racing = null;
+  state.progress = null;
+  state.savedAt = 0;
+  clearProgress();
   state.source.begin();
   // Start from where we already know we are, if that is fresh.
   if (!state.demo && state.lastFix && performance.now() - state.lastFix.at < 3000) {
@@ -146,10 +193,47 @@ function startRun() {
   keepAwake();
 }
 
+/** Write the run in progress down, so a reload can carry it on. */
+function noteProgress() {
+  const fixes = state.session?.fixes();
+  if (!fixes || fixes.length < 5) return;
+  state.savedAt = Date.now();
+  saveProgress({ savedAt: state.savedAt, startedAt: state.startedAt, row: state.row, settings: state.settings, elapsed: state.source.elapsed(), demo: state.demo?.name ?? null, fixes });
+}
+
+/** Carry on a run that a reload interrupted: the same ghost, the same clock, every position replayed. */
+function resumeRun() {
+  const p = state.progress;
+  const row = homeRows().find((r) => r.id === p.row);
+  if (!row) {
+    // The run it was racing has gone: nothing to carry on against.
+    state.progress = null;
+    clearProgress();
+    return;
+  }
+  state.settings = { ...state.settings, ...p.settings };
+  chooseGhost(row);
+  state.session = createRunSession({ ghost: state.ghost, clock: state.settings.clock });
+  for (const fix of p.fixes) state.session.update(fix);
+  state.startedAt = p.startedAt;
+  state.reading = null;
+  state.shown = null;
+  state.history = [];
+  state.banner = null;
+  state.side = 0;
+  state.racing = null;
+  // The time away counts: the clock on a live run kept going. A sample run picks up where it stopped.
+  state.source.begin(p.demo ? p.elapsed : p.elapsed + (Date.now() - p.savedAt) / 1000);
+  state.progress = null;
+  state.screen = 'run';
+  keepAwake();
+}
+
 function finishRun() {
   const summary = state.session.finish(state.source.elapsed());
   state.summary = summary;
   state.session = null;
+  clearProgress();
   if (summary.distance > 200) {
     const run = storedRun({ ...summary, startedAt: state.startedAt, demo: Boolean(state.demo) });
     state.runs = [run, ...state.runs.filter((r) => r.id !== run.id)];
@@ -189,6 +273,16 @@ function tick() {
     state.banner = { text: side > 0 ? 'You passed the ghost' : 'The ghost passed you', until: performance.now() + 5000 };
   }
   if (side) state.side = side;
+  // A pace ghost carrying saved runs: say so when one of them takes over, and when it hands back.
+  if (state.ghost.tracks?.length) {
+    const racing = reading.racing === 'recording' ? reading.track : 'pace';
+    if (state.racing != null && racing !== state.racing) {
+      const text = racing === 'pace' ? `Back to the ${pace(state.ghost.secondsPerKm)} ghost` : `${state.ghost.tracks[racing].run.demo ? 'The sample run' : `Your run of ${dateLabel(state.ghost.tracks[racing].run.startedAt)}`} takes over`;
+      state.banner = { text, until: performance.now() + 5000 };
+    }
+    state.racing = racing;
+  }
+  if (Date.now() - state.savedAt > 10000) noteProgress();
   if (!reading.paused) {
     state.history.push({ time: reading.time, timeGap: reading.timeGap });
     while (state.history.length && reading.time - state.history[0].time > 30) state.history.shift();
@@ -213,7 +307,8 @@ function key(name) {
     } else if (row.id === 'clock' && (turn || enter)) {
       state.settings.clock = state.settings.clock === 'moving' ? 'elapsed' : 'moving';
       saveSettings('ghost', state.settings);
-    } else if (enter) chooseGhost(row);
+    } else if (enter && row.id === 'resume') resumeRun();
+    else if (enter) chooseGhost(row);
   } else if (state.screen === 'ready') {
     if (enter) startRun();
     else if (turn < 0 || move < 0) state.screen = 'home';
@@ -269,6 +364,10 @@ function draw() {
       const away = haversine(state.lastFix.lat, state.lastFix.lon, state.ghost.start.lat, state.ghost.start.lon);
       lines.push(away > 60 ? { text: `That run started ${away < 1000 ? `${Math.round(away)} m` : `${km(away)} km`} from here`, tone: 'warn', size: 26 } : { text: 'You are at its start', tone: 'good', size: 26 });
     }
+    if (state.ghost.tracks?.length) {
+      const n = state.ghost.tracks.length;
+      lines.push({ text: `${n === 1 ? 'Your saved run takes' : `Your ${n} saved runs take`} over on their routes`, tone: 'dim', size: 24 });
+    }
     const guide = state.ghost.guide;
     if (guide) {
       const waits = guide.pausePoints.length;
@@ -289,7 +388,8 @@ function draw() {
       const now = performance.now();
       const notice = r.fixAge > 5 ? 'GPS?' : r.offRoute ? 'OFF ROUTE' : r.finished ? 'FINISHED' : r.accuracy > 30 ? 'GPS WEAK' : null;
       // The next turn or likely wait, while on the ghost's route and within 200 m of it.
-      const next = state.ghost.guide && r.routeDist != null && !r.finished ? nextCue(state.ghost.guide, r.routeDist).now : null;
+      const guide = guideNow(r);
+      const next = guide && r.routeDist != null && !r.finished ? nextCue(guide, r.routeDist).now : null;
       const cue = next && next.in <= 200 && next.kind !== 'finish' ? { title: describe(next).title, distance: metres(next.in), in: next.in, side: next.kind === 'turn' ? next.side : null } : null;
       drawRun(ctx, {
         time: r.time,
@@ -298,7 +398,7 @@ function draw() {
         timeGap: s.timeGap,
         distGap: s.distGap,
         trend: r.paused ? 0 : trend(),
-        ghostLabel: r.racing === 'pace' && state.ghost.standInLabel ? state.ghost.standInLabel : state.ghost.label,
+        ghostLabel: ghostLabelNow(r),
         paused: r.paused,
         notice,
         cue,
@@ -366,13 +466,16 @@ async function init() {
   if (sample) {
     try {
       const { mine, theirs } = await loadSample(sample);
-      state.demo = { fixes: fixesOf(mine), speed: clamp(Number(params.get('speed')) || 10, 1, 60) };
+      state.demo = { name: sample, fixes: fixesOf(mine), speed: clamp(Number(params.get('speed')) || 10, 1, 60) };
       state.runs = [theirs, ...state.runs];
     } catch (error) {
       showStatus(`Could not load the sample run: ${error.message}`);
     }
   }
   openSource();
+  // A run a reload interrupted, if it is recent and of the same kind (live, or this sample).
+  const left = loadProgress();
+  if (left && (left.demo ?? null) === (state.demo?.name ?? null)) state.progress = left;
 
   document.addEventListener('keydown', (event) => {
     if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(event.key)) return;

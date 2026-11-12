@@ -6,6 +6,7 @@ import { parseGpx, toFixes, findPauses, fillGaps, measureDistance, movingTime } 
 
 const RUNS_KEY = 'sportshud.runs.v1';
 const SETTINGS_KEY = 'sportshud.settings.v1';
+const PROGRESS_KEY = 'sportshud.progress.v1';
 const KEEP_RUNS = 8;
 const FIXTURES = new URL('../../fixtures/synthetic/', import.meta.url);
 
@@ -30,6 +31,34 @@ export function saveRuns(runs) {
     } catch {
       // Too big: try again with one fewer.
     }
+  }
+}
+
+/**
+ * A run in progress, kept so that a page that reloads or a phone that drops
+ * the tab does not lose it: when it began, what it was racing, and every
+ * position so far.
+ */
+export function saveProgress(progress) {
+  try {
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify({ ...progress, fixes: progress.fixes.map((f) => [Math.round(f.t * 10) / 10, Number(f.lat.toFixed(6)), Number(f.lon.toFixed(6)), Math.round(f.accuracy ?? 0)]) }));
+  } catch {
+    // No room: the run carries on, it just cannot be picked up after a reload.
+  }
+}
+
+/** The run in progress, if one was left less than `maxAgeMs` ago. */
+export function loadProgress(maxAgeMs = 30 * 60 * 1000) {
+  const p = load(PROGRESS_KEY, null);
+  if (!p || !Array.isArray(p.fixes) || p.fixes.length < 5 || Date.now() - p.savedAt > maxAgeMs) return null;
+  return { ...p, fixes: p.fixes.map(([t, lat, lon, accuracy]) => ({ t, lat, lon, accuracy })) };
+}
+
+export function clearProgress() {
+  try {
+    localStorage.removeItem(PROGRESS_KEY);
+  } catch {
+    // Nothing to clear.
   }
 }
 

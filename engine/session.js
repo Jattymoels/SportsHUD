@@ -13,8 +13,11 @@ const AWAY_SECONDS = 6; // off the recording this long before a display need say
 
 /**
  * @param {object} setup
- * @param {{kind:'pace', secondsPerKm:number} | {kind:'track', route:object, profile:object, fallback?:number}} setup.ghost
- *   a pace to hold, or a route and profile from prepareGhost. With
+ * @param {{kind:'pace', secondsPerKm:number, tracks?:Array<{route:object, profile:object}>} | {kind:'track', route:object, profile:object, fallback?:number}} setup.ghost
+ *   a pace to hold, or a route and profile from prepareGhost. A pace ghost
+ *   given `tracks`, recorded ghosts from prepareGhost, hands over to one of
+ *   them wherever the runner's way joins its route, and takes over again
+ *   when they leave it: live segments. With
  *   `fallback`, a pace in seconds per km, the recording is raced as a live
  *   segment: wherever the runner is off its route (another street, a start
  *   part-way along, a different finish) a ghost holding that pace stands in,
@@ -27,8 +30,11 @@ const AWAY_SECONDS = 6; // off the recording this long before a display need say
  */
 export function createRunSession({ ghost, clock = 'moving', splitEvery = 1000, options } = {}) {
   const standIn = ghost.kind === 'track' && ghost.fallback > 0;
+  const carrying = ghost.kind === 'pace' && ghost.tracks?.length > 0;
   const tracker =
-    ghost.kind === 'pace'
+    carrying
+      ? createSegmentTracker({ secondsPerKm: ghost.secondsPerKm, tracks: ghost.tracks }, options)
+      : ghost.kind === 'pace'
       ? createPaceTracker(speedOfPace(ghost.secondsPerKm), options)
       : standIn
         ? createSegmentTracker({ secondsPerKm: ghost.fallback, tracks: [{ route: ghost.route, profile: ghost.profile }] }, options)
@@ -61,12 +67,14 @@ export function createRunSession({ ghost, clock = 'moving', splitEvery = 1000, o
   function gapAt(t) {
     const gap = tracker.at(t);
     if (!gap) return null;
-    if (ghost.kind === 'pace') return { ...gap, racing: 'pace', offRoute: false, routeDist: null };
-    if (!standIn) return { ...gap, racing: 'recording', offRoute: gap.offRoute ?? false, routeDist: gap.dist };
+    // A pace ghost carrying recordings: whichever is in charge, on any route, with no finish.
+    if (carrying) return { ...gap, racing: gap.ghost, offRoute: false, finished: false, ghostDist: gap.ghostDist ?? gap.dist - gap.distGap };
+    if (ghost.kind === 'pace') return { ...gap, racing: 'pace', track: null, offRoute: false, routeDist: null };
+    if (!standIn) return { ...gap, racing: 'recording', track: 0, offRoute: gap.offRoute ?? false, routeDist: gap.dist };
     // A recording with a pace ghost standing in wherever the runner is off it.
     if (gap.reached) {
       // Followed to its end: the race is over and the gap stays as it stood there.
-      return { ...gap, ...gap.reached, time: gap.time, racing: 'recording', offRoute: false, finished: true, routeDist: ghost.route.length, ghostDist: ghost.route.length - gap.reached.distGap };
+      return { ...gap, ...gap.reached, time: gap.time, racing: 'recording', track: 0, offRoute: false, finished: true, routeDist: ghost.route.length, ghostDist: ghost.route.length - gap.reached.distGap };
     }
     const racing = gap.ghost;
     return { ...gap, racing, offRoute: racing === 'pace' && t - (onRecordingAt ?? t) >= AWAY_SECONDS, ghostDist: gap.ghostDist ?? gap.dist - gap.distGap };
@@ -85,6 +93,7 @@ export function createRunSession({ ghost, clock = 'moving', splitEvery = 1000, o
       timeGap: gap.timeGap, // seconds; positive is ahead of the ghost
       distGap: gap.distGap, // metres; positive is ahead of the ghost
       racing: gap.racing, // which ghost the gap is to right now: 'recording' or 'pace'
+      track: gap.racing === 'recording' ? (gap.track ?? 0) : null, // which recording, by its place in the ghost's tracks
       offRoute: gap.offRoute, // racing a recording, and away from its route
       finished: gap.finished, // racing a recording, and reached its end
       routeDist: gap.routeDist, // metres along the ghost's route, when on it
@@ -122,10 +131,12 @@ export function createRunSession({ ghost, clock = 'moving', splitEvery = 1000, o
       heldByHand = false;
       setPaused(false, t);
     },
+    /** Every position taken so far, for an app to keep in case the run is interrupted. */
+    fixes: () => fixes,
     /**
      * The reading for a display at elapsed time `t`; null before the first fix.
      * @returns {{t:number, time:number, paused:boolean, distance:number, speed:number, timeGap:number,
-     *   distGap:number, racing:'recording'|'pace', offRoute:boolean, finished:boolean,
+     *   distGap:number, racing:'recording'|'pace', track:number|null, offRoute:boolean, finished:boolean,
      *   routeDist:number|null, ghostDist:number, fixAge:number, accuracy:number|null, splits:Array}|null}
      */
     at,

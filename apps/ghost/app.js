@@ -5,94 +5,20 @@
 // Everything is driven by five keys, as on the glasses: the four arrows and
 // Enter. On a phone, a swipe is an arrow and a tap is Enter.
 
-import {
-  parseGpx,
-  toFixes,
-  toGpx,
-  findPauses,
-  fillGaps,
-  measureDistance,
-  movingTime,
-  haversine,
-  ghostFromFixes,
-  createRunSession,
-} from '../../engine/index.js';
+import { toGpx, haversine, ghostFromFixes, createRunSession } from '../../engine/index.js';
 import { SIZE, drawRun, drawList, drawMenu, drawCard, clock, pace, km } from './hud.js';
+import { loadRuns, saveRuns, loadSettings, saveSettings, storedRun, fixesOf, runFromGpx, loadSample } from './store.js';
+import { liveSource, demoSource } from './sources.js';
 
-const RUNS_KEY = 'sportshud.runs.v1';
-const SETTINGS_KEY = 'sportshud.ghost.v1';
-const KEEP_RUNS = 8;
-const FIXTURES = new URL('../../fixtures/synthetic/', import.meta.url);
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-
-// ---------------------------------------------------------------- storage --
-
-function load(key, fallback) {
-  try {
-    return JSON.parse(localStorage.getItem(key)) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-/** Save, dropping the oldest runs if the browser's storage is full. */
-function saveRuns() {
-  for (let keep = Math.min(state.runs.length, KEEP_RUNS); keep >= 0; keep--) {
-    try {
-      localStorage.setItem(RUNS_KEY, JSON.stringify(state.runs.filter((r) => !r.demo).slice(0, keep)));
-      return;
-    } catch {
-      // Too big: try again with one fewer.
-    }
-  }
-}
-
-function saveSettings() {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
-  } catch {
-    // Settings are a convenience; carry on without them.
-  }
-}
-
-/** A run in the shape it is stored in: fixes as [t, lat, lon] to keep it small. */
-function storedRun({ startedAt, distance, time, fixes, pauses, demo = false }) {
-  return {
-    id: String(startedAt),
-    startedAt,
-    distance: Math.round(distance),
-    time: Math.round(time),
-    secondsPerKm: distance > 50 ? time / (distance / 1000) : null,
-    fixes: fixes.map((f) => [Math.round(f.t * 10) / 10, Number(f.lat.toFixed(6)), Number(f.lon.toFixed(6))]),
-    pauses: pauses.map((p) => ({ start: Math.round(p.start * 10) / 10, end: Math.round(p.end * 10) / 10 })),
-    demo,
-  };
-}
-const fixesOf = (run) => run.fixes.map(([t, lat, lon]) => ({ t, lat, lon }));
-
-function runFromGpx(text, demo = false) {
-  const recording = parseGpx(text);
-  const saved = toFixes(recording);
-  const pauses = findPauses(saved);
-  const fixes = fillGaps(saved);
-  const profile = measureDistance(fixes);
-  return storedRun({
-    startedAt: recording.points.find((p) => p.time != null).time,
-    distance: profile.dist[profile.dist.length - 1],
-    time: movingTime(pauses, fixes[fixes.length - 1].t),
-    fixes,
-    pauses,
-    demo,
-  });
-}
 
 // ------------------------------------------------------------------ state --
 
 const state = {
   screen: 'home', // home | ready | run | menu | done
-  runs: load(RUNS_KEY, []), // newest first
-  settings: { secondsPerKm: 330, clock: 'moving', ...load(SETTINGS_KEY, {}) },
+  runs: loadRuns(), // newest first
+  settings: { secondsPerKm: 330, clock: 'moving', ...loadSettings('ghost') },
   selected: 0, // highlighted row on the home screen
   ghost: null, // the chosen ghost, ready for a session
   source: null, // where positions come from: GPS, or a replay in demo mode
@@ -113,56 +39,6 @@ const state = {
 const dateLabel = (ms) => new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
 // ---------------------------------------------------------------- sources --
-//
-// A source hands over positions. `begin()` marks the start of the run and
-// `elapsed()` is seconds since then. A live fix is stamped when it arrives;
-// a replayed one carries its own time.
-
-function liveSource(onFix, onError) {
-  let watch = null;
-  let began = null;
-  return {
-    open() {
-      if (!navigator.geolocation) return onError({ message: 'This browser has no location service.' });
-      watch = navigator.geolocation.watchPosition(
-        (p) => onFix({ lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy }),
-        onError,
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
-      );
-    },
-    close() {
-      if (watch != null) navigator.geolocation.clearWatch(watch);
-    },
-    begin() {
-      began = performance.now();
-    },
-    elapsed: () => (performance.now() - began) / 1000,
-  };
-}
-
-function demoSource(fixes, speed, onFix) {
-  let began = null;
-  let next = 0;
-  let timer = null;
-  const elapsed = () => ((performance.now() - began) / 1000) * speed;
-  return {
-    open() {
-      // Stand at the start until the run begins.
-      timer = setInterval(() => {
-        if (began == null) return onFix({ lat: fixes[0].lat, lon: fixes[0].lon, accuracy: 5 });
-        while (next < fixes.length && fixes[next].t <= elapsed()) onFix({ ...fixes[next++], accuracy: 5 });
-      }, 100);
-    },
-    close() {
-      clearInterval(timer);
-    },
-    begin() {
-      began = performance.now();
-    },
-    elapsed,
-    ended: () => began != null && next >= fixes.length,
-  };
-}
 
 function onFix(fix) {
   state.gpsError = null;
@@ -251,7 +127,7 @@ function finishRun() {
   if (summary.distance > 200) {
     const run = storedRun({ ...summary, startedAt: state.startedAt, demo: Boolean(state.demo) });
     state.runs = [run, ...state.runs.filter((r) => r.id !== run.id)];
-    saveRuns();
+    saveRuns(state.runs);
     summary.saved = true;
   }
   wakeLock?.release().catch(() => {});
@@ -307,10 +183,10 @@ function key(name) {
     if (move) state.selected = clamp(state.selected + move, 0, rows.length - 1);
     else if (row.id === 'pace' && turn) {
       state.settings.secondsPerKm = clamp(state.settings.secondsPerKm + turn * 5, 120, 900);
-      saveSettings();
+      saveSettings('ghost', state.settings);
     } else if (row.id === 'clock' && (turn || enter)) {
       state.settings.clock = state.settings.clock === 'moving' ? 'elapsed' : 'moving';
-      saveSettings();
+      saveSettings('ghost', state.settings);
     } else if (enter) chooseGhost(row);
   } else if (state.screen === 'ready') {
     if (enter) startRun();
@@ -430,7 +306,7 @@ async function importGpx(input) {
   try {
     const run = runFromGpx(await file.text());
     state.runs = [run, ...state.runs.filter((r) => r.id !== run.id)];
-    saveRuns();
+    saveRuns(state.runs);
     showStatus(`Added ${file.name} as a ghost.`);
   } catch (error) {
     showStatus(`${file.name}: ${error.message}`);
@@ -453,9 +329,9 @@ async function init() {
   const sample = ['run', 'ride', 'walk'].includes(params.get('demo')) ? params.get('demo') : null;
   if (sample) {
     try {
-      const [mine, theirs] = await Promise.all(['b', 'a'].map(async (who) => (await fetch(new URL(`${sample}-${who}.gpx`, FIXTURES))).text()));
-      state.demo = { fixes: fixesOf(runFromGpx(mine)), speed: clamp(Number(params.get('speed')) || 10, 1, 60) };
-      state.runs = [runFromGpx(theirs, true), ...state.runs];
+      const { mine, theirs } = await loadSample(sample);
+      state.demo = { fixes: fixesOf(mine), speed: clamp(Number(params.get('speed')) || 10, 1, 60) };
+      state.runs = [theirs, ...state.runs];
     } catch (error) {
       showStatus(`Could not load the sample run: ${error.message}`);
     }

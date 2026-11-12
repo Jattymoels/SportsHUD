@@ -38,6 +38,18 @@ export function paceOf(recording, options) {
   return { secondsPerKm: time / (distance / 1000), distance, time };
 }
 
+/**
+ * A ghost holding a pace along a known route, in the shape of a recorded
+ * ghost's progress. With this, a pace ghost can be raced on a route with
+ * everything a recorded one gets: snapping to the route, and a place on it.
+ *
+ * @param {number} routeLength metres
+ * @returns {{t:Float64Array, dist:Float64Array, stops:Array}}
+ */
+export function paceProfile(routeLength, secondsPerKm) {
+  return { t: Float64Array.from([0, (routeLength / 1000) * secondsPerKm]), dist: Float64Array.from([0, routeLength]), stops: [] };
+}
+
 /** Gap to a ghost moving at `speed` m/s, for a runner `dist` metres in at `time` on their clock. */
 export function paceGapAt(speed, time, dist) {
   const ghostDist = speed * time;

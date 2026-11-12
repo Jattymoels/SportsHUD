@@ -13,13 +13,14 @@ Build 1 of the spec: the track engine and a desk replay harness.
 | --- | --- |
 | `engine/` | The track engine: reads GPX, snaps positions to a route, measures distance along it or without it, and computes the time and distance gap to a ghost. The ghost is either a recording of the same route or a set pace on any route. A plain JavaScript library with no display code and nothing sport-specific. Tests are in `engine/tests/`. |
 | `apps/ghost/` | Ghost run, the first prototype of the race screen: a 600×600 display driven by the arrow keys and Enter, that races a pace or a past run using live GPS. Made to be tried on a phone, standing in for the glasses. |
+| `apps/probe/` | The anchoring probe: the route, its markers and the ghost placed over a phone's camera picture, using only GPS and the compass. The nearest thing to glasses that place things in the world, and a first measure of how far off the placing is. |
 | `apps/preview/` | Through the glasses: a recorded run from the runner's eyes, with the ghost and distance markers placed in the world along the route. A preview of where the product is heading, with a switch to the heads-up square that today's display can show. Desk tool. |
 | `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to either kind of ghost. |
 | `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. |
 | `tools/` | A small local web server and a command-line B1 report. |
 | `docs/` | The spec and research notes. |
 
-The other apps in the spec (`apps/probe/`, `apps/route/`, `apps/golf/`) come with builds 3 to 5.
+The other apps in the spec (`apps/route/`, `apps/golf/`) come with builds 4 and 5.
 
 ## Running it
 
@@ -55,6 +56,19 @@ Open `apps/ghost/` on the phone, outdoors, and allow location.
 Swipes are the arrow keys and a tap is Enter, which is all the glasses have. Keep the page open and the screen on: a phone that locks stops reporting where it is. Runs are kept in the browser's storage on that device, the latest eight, and nowhere else. "Download my latest run" saves one as GPX.
 
 `apps/ghost/?demo=run&speed=10` plays a sample run without GPS.
+
+## The anchoring probe, on a phone
+
+Open `apps/probe/` on the phone, outdoors, on a route you have run, and allow the camera and location. The picture never leaves the phone.
+
+1. Choose the route: a run saved by Ghost run on that phone, or a GPX you add.
+2. Stand on the route, facing along it, phone upright. The blue line should lie on the path ahead, with a gate at each 500 m.
+3. If the line points off to one side, slide "Turn the picture". If things look too large or too small against the street, change how wide the camera sees.
+4. Start the ghost, and walk or jog the route with the phone held in front of you.
+
+Where you are along the route comes from GPS, snapped to the route as everywhere else. Which way you are facing comes from the phone's compass, and that is the one thing between this and a ghost that sits still on the road. So the probe measures it: while you move along the route with the phone pointing ahead, it compares the compass with the route's direction and shows the typical difference, against the spec's B4 targets of 5° walking and 10° running. "Match the compass" takes out a steady lean.
+
+`apps/probe/?demo=run&speed=5` plays a sample run on a stand-in street, with no camera or compass needed.
 
 ## Using your own recordings
 

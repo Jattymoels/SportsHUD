@@ -10,7 +10,7 @@ import {
   checkB1,
   checkPace,
 } from '../../engine/index.js';
-import { drawScene, steady } from './scene.js';
+import { drawScene, steady, VIEW_FOV } from './scene.js';
 import { clock } from '../ghost/hud.js';
 
 const FIXTURES = new URL('../../fixtures/', import.meta.url);
@@ -259,7 +259,7 @@ async function init() {
   });
   canvas.addEventListener('pointermove', (event) => {
     if (!drag) return;
-    const perPixel = (64 * Math.PI) / 180 / canvas.clientWidth;
+    const perPixel = (VIEW_FOV * Math.PI) / 180 / canvas.clientWidth;
     state.look = clamp(drag.look - (event.clientX - drag.x) * perPixel, -Math.PI, Math.PI);
   });
   canvas.addEventListener('pointerup', () => (drag = null));

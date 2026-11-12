@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The ghost from the race screen, on the road, on black. Everything that matters sits inside the middle 80%, so the icon survives being cut to a circle. -->
+  <rect width="512" height="512" fill="#000"/>
+  <path d="M146 420 L256 196 L366 420" fill="none" stroke="#3a3a36" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M176 344 V214 a80 80 0 0 1 160 0 V344 q-26.7 -38 -53.3 0 q-26.7 -38 -53.3 0 q-26.7 -38 -53.4 0 z" fill="#262624" stroke="#f4f4ee" stroke-width="14" stroke-linejoin="round"/>
+</svg>

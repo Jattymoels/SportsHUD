@@ -69,8 +69,8 @@ The prototypes prove behaviours. A product is the same behaviours when nobody is
 
 1. **It stops when the phone locks.** A web page gets no position once the screen is off. In a pocket, on a real run, that is fatal. Either the app runs on the glasses, which get position through the maker's own phone app, or the phone side becomes a small native app that keeps position running. This is the biggest gap and no amount of desk work on the web page closes it.
 2. **It has never been outdoors.** Every number in `docs/results.md` is from replayed or made-up data.
-3. **It cannot be installed and needs a signal to load.** It should open from the home screen and work with no signal on a course or a trail.
-4. **Runs live in one browser's storage.** Clearing the browser loses them. There is no way to move them to a new phone short of exporting files one at a time.
+3. ~~It cannot be installed and needs a signal to load.~~ **Done at the desk.** It can be added to the home screen and, after one visit, every page works with no signal. Not yet tried on a phone.
+4. ~~Runs live in one browser's storage.~~ **Eased.** They still live there, but one file now backs up every run and loads into another phone, and the browser is asked not to clear them. A product would keep them in an account.
 5. **Getting past runs in is manual.** Exporting GPX files by hand is fine for one tester. Strava now needs a paid developer subscription and approval beyond ten people; Garmin's new personal access is for individuals, not for apps with many users. Recording in the app, and links between friends, avoid both. Links between friends are now built.
 6. **Golf course data.** OpenStreetMap has half of one club. A product needs licensed course data; the suppliers found do not publish prices.
 7. **No miles or yards.** Everything is metric.
@@ -78,7 +78,7 @@ The prototypes prove behaviours. A product is the same behaviours when nobody is
 9. **It draws sixty times a second whether or not anything changed.** That matters on a battery.
 10. **One display.** The screens are drawn for 600×600 colour. A text display over Bluetooth needs its own, simpler screens from the same readings.
 
-Items 3, 4, 5, 7, 9 and 10 can be done at the desk. Item 1 needs a decision about platform. Items 2, 6 and 8 need the owner.
+Items 3 and 4 are done, and links between friends take the edge off item 5. Items 7, 9 and 10 can still be done at the desk. Item 1 needs a decision about platform. Items 2, 6 and 8 need the owner.
 
 ## Sources
 

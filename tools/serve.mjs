@@ -18,6 +18,8 @@ const types = {
   '.json': 'application/json; charset=utf-8',
   '.gpx': 'application/gpx+xml',
   '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
 };
 

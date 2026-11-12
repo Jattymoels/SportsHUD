@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <title>Ghost run · SportsHUD</title>
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../../icons/icon-180.png">
+  <script type="module" src="../../offline.js"></script>
   <link rel="stylesheet" href="ghost.css">
 </head>
 <body>
@@ -23,10 +26,11 @@
       </div>
       <p id="status" role="status"></p>
       <p>
-        <label class="file">Add past runs as ghosts (GPX; choose as many as you like)
-          <input id="import" type="file" accept=".gpx,application/gpx+xml,text/xml" multiple>
+        <label class="file">Add past runs as ghosts (GPX; choose as many as you like), or load a backup
+          <input id="import" type="file" accept=".gpx,.json,application/gpx+xml,application/json,text/xml" multiple>
         </label>
         <button id="export" type="button">Download my latest run (GPX)</button>
+        <button id="backup" type="button">Download all my runs (backup)</button>
       </p>
       <fieldset id="shareBox">
         <legend>Send a run to a friend as a ghost</legend>
@@ -50,7 +54,8 @@
           <li>Allow location when the browser asks, and use it outdoors.</li>
           <li>Keep this page open and the screen on. A phone that locks stops reporting where you are.</li>
           <li>Swipe on the display for the arrows, tap it for Enter. On the glasses these are the wristband gestures.</li>
-          <li>Your runs are saved on this device only, and each becomes a ghost to race next time.</li>
+          <li>Your runs are saved on this device only, and each becomes a ghost to race next time. "Download all my runs" keeps a copy, and loads into another phone the same way a GPX does.</li>
+          <li>Add this page to your home screen (in the browser's menu) and it opens like an app, and works with no signal.</li>
           <li>A friend can send you a run as a link. Open it on this device and it is added to your ghosts.</li>
           <li><a href="?demo=run&amp;speed=10">Watch a sample run</a> without going anywhere.</li>
         </ul>

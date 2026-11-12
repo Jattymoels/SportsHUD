@@ -8,7 +8,7 @@
 import { toGpx, haversine, ghostFromFixes, createRunSession, groupFixes, guideFromRuns, nextCue, packRun, trimEnds } from '../../engine/index.js';
 import { describe, metres, wait } from '../route/screen.js';
 import { SIZE, drawRun, drawList, drawMenu, drawCard, clock, pace, km } from './hud.js';
-import { loadRuns, saveRuns, loadSettings, saveSettings, storedRun, fixesOf, runFromGpx, runFromLink, loadSample, saveProgress, loadProgress, clearProgress } from './store.js';
+import { loadRuns, saveRuns, loadSettings, saveSettings, storedRun, fixesOf, runFromGpx, runFromLink, backupText, runsFromBackup, loadSample, saveProgress, loadProgress, clearProgress } from './store.js';
 import { liveSource, demoSource } from './sources.js';
 
 const $ = (id) => document.getElementById(id);
@@ -436,6 +436,7 @@ function showStatus(message) {
   parts.push(`${state.runs.filter((r) => !r.demo).length} saved run(s) on this device${sent ? `, ${sent} of them sent by friends` : ''}.`);
   $('status').textContent = parts.join(' ');
   $('export').disabled = !state.runs.some(own);
+  $('backup').disabled = !state.runs.some((r) => !r.demo);
   listShareable();
 }
 
@@ -518,9 +519,18 @@ async function importGpx(input) {
   if (!files.length) return;
   const added = [];
   const failed = [];
+  let restored = 0;
   for (const file of files) {
     try {
-      const run = runFromGpx(await file.text());
+      const text = await file.text();
+      if (/\.json$/i.test(file.name) || text.trimStart().startsWith('{')) {
+        // A backup: every run in it that is not here already.
+        const fresh = runsFromBackup(text).filter((run) => !state.runs.some((r) => r.id === run.id));
+        state.runs = [...fresh, ...state.runs];
+        restored += fresh.length;
+        continue;
+      }
+      const run = runFromGpx(text);
       state.runs = [run, ...state.runs.filter((r) => r.id !== run.id)];
       added.push(file.name);
     } catch (error) {
@@ -532,18 +542,29 @@ async function importGpx(input) {
   saveRuns(state.runs);
   state.runs = [...state.runs.filter((r) => r.demo), ...loadRuns()];
   const kept = added.length ? `Added ${added.length === 1 ? added[0] : `${added.length} runs`} as ${added.length === 1 ? 'a ghost' : 'ghosts'}.` : '';
-  showStatus([kept, ...failed].filter(Boolean).join(' '));
+  const back = restored ? `Brought back ${restored} run${restored === 1 ? '' : 's'} from the backup.` : '';
+  showStatus([kept, back, ...failed].filter(Boolean).join(' '));
+}
+
+function download(text, type, name) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Every saved run in one file: the way to keep them safe, or to move to another phone. */
+function exportAll() {
+  if (!state.runs.some((r) => !r.demo)) return;
+  download(backupText(state.runs), 'application/json', `sportshud-runs-${new Date().toISOString().slice(0, 10)}.json`);
 }
 
 function exportLatest() {
   const run = state.runs.find(own);
   if (!run) return;
-  const url = URL.createObjectURL(new Blob([toGpx(fixesOf(run), { name: `SportsHUD run ${dateLabel(run.startedAt)}`, startedAt: run.startedAt })], { type: 'application/gpx+xml' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `sportshud-${new Date(run.startedAt).toISOString().slice(0, 10)}.gpx`;
-  link.click();
-  URL.revokeObjectURL(url);
+  download(toGpx(fixesOf(run), { name: `SportsHUD run ${dateLabel(run.startedAt)}`, startedAt: run.startedAt }), 'application/gpx+xml', `sportshud-${new Date(run.startedAt).toISOString().slice(0, 10)}.gpx`);
 }
 
 async function init() {
@@ -586,6 +607,7 @@ async function init() {
   for (const button of document.querySelectorAll('[data-key]')) button.addEventListener('click', () => key(button.dataset.key));
   $('import').addEventListener('change', (event) => importGpx(event.target));
   $('export').addEventListener('click', exportLatest);
+  $('backup').addEventListener('click', exportAll);
   $('shareFrom').value = state.settings.from ?? '';
   $('shareTrim').checked = state.settings.trim ?? true;
   $('share').addEventListener('click', shareRun);

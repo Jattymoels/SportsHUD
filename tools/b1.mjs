@@ -5,16 +5,27 @@
 //
 // Add --elapsed to keep the clocks running through pauses (race timing).
 // By default paused time does not count.
+//
+// Add --segments=5:15 to run the live segments check (B12) instead: the
+// runner against a ghost holding that pace per km, with the ghost recording
+// taking over wherever the two routes share ground. Pairs in
+// fixtures/index.json that share only part of a route are always run this way.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { parseGpx, checkB1 } from '../engine/index.js';
+import { parseGpx, checkB1, checkSegments } from '../engine/index.js';
 
 const fixtures = fileURLToPath(new URL('../fixtures/', import.meta.url));
 const load = (path) => parseGpx(readFileSync(path, 'utf8'));
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const clock = process.argv.includes('--elapsed') ? 'elapsed' : 'moving';
+const paceArg = /^--segments=(\d{1,2}):([0-5]\d)$/.exec(process.argv.find((a) => a.startsWith('--segments')) ?? '');
+if (process.argv.some((a) => a.startsWith('--segments')) && !paceArg) {
+  console.error('Give the pace as minutes:seconds per km, for example --segments=5:15');
+  process.exit(1);
+}
+const segmentsPace = paceArg ? Number(paceArg[1]) * 60 + Number(paceArg[2]) : null;
 
 let pairs;
 if (args.length >= 2) {
@@ -26,7 +37,28 @@ if (args.length >= 2) {
 
 const pct = (x) => (100 * x).toFixed(1) + '%';
 const sec = (x) => x.toFixed(2) + ' s';
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const signed = (x, digits = 1) => `${x >= 0 ? '+' : ''}${x.toFixed(digits)}`;
+
+function segments(pair, secondsPerKm) {
+  const { stats, switches, stretches, live } = checkSegments([load(pair.ghost)], load(pair.runner), secondsPerKm, { clock });
+  console.log(`\n${pair.label}: live segments`);
+  console.log(`  ghost holds ${mmss(secondsPerKm)} per km; the ghost recording takes over where the routes share ground`);
+  console.log(`  clock: ${clock === 'moving' ? `paused time not counted (replayed recording paused ${stats.pausedS.runner.toFixed(0)} s)` : 'elapsed, never stops'}; gap at the end ${signed(live.at(-1).timeGap, 0)} s; ${(stats.distance / 1000).toFixed(2)} km measured`);
+  console.log(`  racing the recording for ${mmss(stats.onRecordingS)} of ${mmss(live.length * stats.tickS)}, in ${stretches.length} stretch(es)`);
+  console.log(`  B12 ${stats.pass ? 'PASS' : 'FAIL'} (no jump at a change of ghost): largest jump ${sec(stats.maxSwitchJump)} over ${switches.length} change(s), target ${stats.jumpS} s; largest change in any one second ${sec(stats.maxStep)}`);
+  for (const s of switches) {
+    const trueT = pair.shared && switches.length === 2 ? (s.to === 'recording' ? pair.shared.joinS : pair.shared.leaveS) : null;
+    const timing = trueT == null ? '' : `, ${Math.abs(s.t - trueT)} s ${s.t >= trueT ? 'after' : 'before'} it truly happened`;
+    console.log(`    ${mmss(s.t).padStart(6)}  ${s.to === 'recording' ? 'recording takes over' : 'set pace takes over '}  ${(s.dist / 1000).toFixed(2)} km in, gap ${signed(s.timeGap)} s${timing}`);
+  }
+}
+
 for (const pair of pairs) {
+  if (segmentsPace || pair.segments) {
+    segments(pair, segmentsPace ?? pair.secondsPerKm);
+    continue;
+  }
   const { stats, route, live } = checkB1(load(pair.ghost), load(pair.runner), { clock });
   const last = live[stats.samples - 1];
   console.log(`\n${pair.label}`);

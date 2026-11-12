@@ -113,6 +113,25 @@ test('cutting a corner: progress is held while off the route, then picked up whe
   assert.ok(fastest < 4, `speed estimate reached ${fastest.toFixed(1)} m/s for a 3 m/s runner`);
 });
 
+test('skipping a detour the route makes: progress is picked up where the runner is, not short of it', () => {
+  // The route goes 25 m up a side street at the 400 m mark and back. The
+  // runner goes straight past, so the route ahead of them is 50 m further
+  // along than the search expects.
+  const route = buildRoute(path([[0, 0], [400, 0], [400, 25], [400, 0], [1000, 0]]));
+  const tracker = createProgressTracker(route);
+  let held = 0;
+  let shortBy = 0;
+  for (const fix of steady(path([[0, 0], [1000, 0]]), 3)) {
+    tracker.update(fix);
+    const now = tracker.at(fix.t);
+    if (now.offRoute) held++;
+    // Once picked up again, the runner is as far from the end of the route as from the end of their own line.
+    else if (held > 0) shortBy = Math.max(shortBy, route.length - (1000 - fix.t * 3) - now.dist);
+  }
+  assert.ok(held > 0 && held <= 25, `held for ${held} s`);
+  assert.ok(shortBy < 4, `picked up ${shortBy.toFixed(1)} m short of where the runner was`);
+});
+
 test('far from the route but travelling along it still counts as on it', () => {
   // The other side of a wide road: 25 m to one side, same direction.
   const route = buildRoute(straight);

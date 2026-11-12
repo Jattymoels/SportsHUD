@@ -20,6 +20,19 @@
       "ghost": "synthetic/walk-a.gpx",
       "runner": "synthetic/walk-b.gpx",
       "synthetic": true
+    },
+    {
+      "id": "shared",
+      "label": "Run sharing part of the route (synthetic)",
+      "ghost": "synthetic/run-a.gpx",
+      "runner": "synthetic/run-shared.gpx",
+      "synthetic": true,
+      "segments": true,
+      "secondsPerKm": 315,
+      "shared": {
+        "joinS": 122,
+        "leaveS": 379
+      }
     }
   ]
 }

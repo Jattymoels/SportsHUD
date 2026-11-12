@@ -10,7 +10,7 @@
   <header class="top">
     <a class="home" href="../../">SportsHUD</a>
     <h1>Replay harness</h1>
-    <p class="lede">Plays one recording back as if it were happening now, and shows the live gap to a ghost: either a second recording of the same route, or a set pace on any route.</p>
+    <p class="lede">Plays one recording back as if it were happening now, and shows the live gap to a ghost: a second recording of the same route, a set pace on any route, or both at once, where the recording takes over from the set pace wherever the two routes share ground.</p>
   </header>
 
   <main>
@@ -36,6 +36,7 @@
         <select id="ghostMode">
           <option value="track">A recording of this route (the Ghost GPX)</option>
           <option value="pace">A set pace, on any route</option>
+          <option value="segments">Live segments: a set pace, and the Ghost GPX where routes overlap</option>
         </select>
       </label>
       <label id="paceBox" hidden>Ghost's pace, minutes:seconds per km
@@ -65,7 +66,7 @@
           <div><dt>Distance done</dt><dd id="dist">–</dd></div>
           <div><dt>Speed</dt><dd id="speedNow">–</dd></div>
           <div><dt>Pace</dt><dd id="pace">–</dd></div>
-          <div><dt>GPS fix to route</dt><dd id="offset">–</dd></div>
+          <div><dt id="offsetLabel">GPS fix to route</dt><dd id="offset">–</dd></div>
           <div><dt>Your time</dt><dd id="time">–</dd></div>
         </dl>
       </section>
@@ -76,6 +77,7 @@
           <li><span class="key dot you"></span><span id="youKey">You, snapped to the route</span></li>
           <li><span class="key dot ghost"></span>Ghost</li>
           <li><span class="key dot raw"></span>Raw GPS fix</li>
+          <li id="trackKey" hidden><span class="key line track"></span>The route the Ghost GPX ran</li>
         </ul>
         <div id="map" class="plot map"></div>
       </section>
@@ -84,8 +86,9 @@
         <h2>Time gap over the recording <span class="unit">seconds; above zero is ahead of the ghost</span></h2>
         <ul class="legend">
           <li><span class="key line you"></span>Live</li>
-          <li><span class="key line after"></span>Computed afterwards</li>
-          <li><span class="key band"></span>Afterwards ± 3 s (the target)</li>
+          <li class="afterKey"><span class="key line after"></span>Computed afterwards</li>
+          <li class="afterKey"><span class="key band"></span>Afterwards ± 3 s (the target)</li>
+          <li id="stretchKey" hidden><span class="key band stretch"></span>Racing the recording (the set pace elsewhere)</li>
         </ul>
         <div id="chart" class="plot chart"></div>
         <div id="tip" class="tip" hidden></div>
@@ -98,7 +101,7 @@
 
       <section class="card wide" aria-label="B1 result">
         <h2><span id="checkTitle">B1 check for this pair</span> <span id="verdict" class="chip"></span></h2>
-        <p class="note">The whole recording is replayed in an instant when it loads. Each one-second live reading is compared with the gap computed afterwards from the complete recording.</p>
+        <p class="note" id="checkNote">The whole recording is replayed in an instant when it loads. Each one-second live reading is compared with the gap computed afterwards from the complete recording.</p>
         <table id="b1" class="stats"></table>
       </section>
     </div>

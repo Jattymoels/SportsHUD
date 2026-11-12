@@ -11,13 +11,13 @@ Build 1 of the spec: the track engine and a desk replay harness.
 
 | Folder | What it holds |
 | --- | --- |
-| `engine/` | The track engine: reads GPX, snaps positions to a route, measures distance along it or without it, and computes the time and distance gap to a ghost. The ghost is either a recording of the same route or a set pace on any route. A plain JavaScript library with no display code and nothing sport-specific. Tests are in `engine/tests/`. |
+| `engine/` | The track engine: reads GPX, snaps positions to a route, measures distance along it or without it, and computes the time and distance gap to a ghost. The ghost is a recording of the same route, a set pace on any route, or a set pace with recordings taking over wherever the route shares theirs. A plain JavaScript library with no display code and nothing sport-specific. Tests are in `engine/tests/`. |
 | `apps/ghost/` | Ghost run, the first prototype of the race screen: a 600×600 display driven by the arrow keys and Enter, that races a pace or a past run using live GPS. Made to be tried on a phone, standing in for the glasses. |
 | `apps/probe/` | The anchoring probe: the route, its markers and the ghost placed over a phone's camera picture, using only GPS and the compass. The nearest thing to glasses that place things in the world, and a first measure of how far off the placing is. |
 | `apps/preview/` | Through the glasses: a recorded run from the runner's eyes, with the ghost and distance markers placed in the world along the route. A preview of where the product is heading, with a switch to the heads-up square that today's display can show. Desk tool. |
-| `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to either kind of ghost. |
-| `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. |
-| `tools/` | A small local web server and a command-line B1 report. |
+| `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to any kind of ghost. |
+| `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. One pair is two different runs that share 800 m of road, for live segments. |
+| `tools/` | A small local web server and a command-line report for B1 and B12. |
 | `docs/` | The spec and research notes. |
 
 The other apps in the spec (`apps/route/`, `apps/golf/`) come with builds 4 and 5.
@@ -42,7 +42,7 @@ runs the unit tests.
 npm run b1
 ```
 
-prints the B1 result for every pair of recordings in `fixtures/index.json`.
+prints the B1 result for every pair of recordings in `fixtures/index.json`, and the live segments result (B12) for the pair that shares only part of a route.
 
 ## Ghost run, on a phone
 
@@ -81,7 +81,7 @@ Export two activities on the same route as GPX from Strava or Garmin. They must 
   node tools/b1.mjs path/to/ghost.gpx path/to/yours.gpx
   ```
 
-  Add `--elapsed` to keep the clocks running through pauses, as in a race. The harness has the same choice under "Clock".
+  Add `--elapsed` to keep the clocks running through pauses, as in a race. The harness has the same choice under "Clock". Add `--segments=5:15` to run them as live segments instead: yours against a ghost holding 5:15 per km, with the ghost recording taking over wherever the two share ground.
 
 - **To keep them as test fixtures:** put the files in `fixtures/recorded/` and add an entry to `fixtures/index.json`:
 
@@ -128,7 +128,22 @@ A ghost can also simply hold a pace, on whatever route is being run. There is no
 - **A past run on a different route** becomes a set pace: that run's average. Its hills and crossings no longer line up with anything, so its average is all that carries over. `paceOf` works it out, and the harness has a button for it.
 - **In the harness,** set "Ghost" to "A set pace, on any route" and type the pace. Only your own recording is needed.
 
-Not built yet: switching to a recorded ghost's own pacing on the stretches where your route overlaps one it ran. See "Pace ghost" in the spec.
+## Live segments
+
+The two kinds of ghost combine. You run wherever you like against a ghost holding a set pace. Wherever your way joins a stretch that a recorded ghost ran, in the same direction, that recording takes over for as long as you stay on it, so the gap there moves by its own pacing, hills and crossings included. When you leave it, the set pace takes over again. `createSegmentTracker` in `engine/segments.js` does this.
+
+- **The gap carries on through every change of ghost.** When a recording takes over, its clock is slid so that its ghost is exactly as far ahead or behind as the pace ghost was. Nothing jumps; from there the gap moves by the recording. The same when the set pace takes back over.
+- **Joining** means being within 12 m of a recorded route and travelling its way for 4 seconds. Running it the other way, crossing it, or running a parallel street 30 m off does not join it.
+- **Leaving** is being more than 10 m off it and not travelling along it. The set pace takes over at once. For 8 seconds the recording is kept in hand, and stepping back onto it picks it up where you rejoin; after that it is let go, and joining it again is a fresh join.
+- **A shortcut is not credited.** If you skip a loop the recorded ghost made, the gap carries on from where it was when you rejoin. Live segments is about the recording's pacing over shared ground, not about racing it door to door; for that, race the recording itself.
+- **A pause** stops the clock as everywhere else, and standing off the route with the clock stopped does not count as leaving it.
+- **More than one recording** can be given. Where two fit the same ground, the first in the list is used.
+
+**B12 scoring.** `checkSegments` replays a run and lists every change of ghost. The gap must not jump at a change: the change in the gap over that second, beyond how it was changing in the seconds either side, has to be within 1 second. Whether a change came soon enough (the spec's target is within 5 seconds of joining and of leaving) needs to know when the runner truly joined and left, which only a made-up recording can say. So that part is tested on the synthetic pair, and on real recordings the changes are listed for you to judge on the map.
+
+**In the harness,** choose "Run sharing part of the route (synthetic)", or set "Ghost" to "Live segments" with two files of your own. The map shows the ghost's route under yours, and the chart is shaded where the recording was being raced.
+
+Not built yet: live segments in Ghost run on the phone. It needs a way to pick which saved runs to carry along, and it has not been tried outdoors.
 
 ## Deployment
 

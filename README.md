@@ -8,7 +8,7 @@ A ghost-racing and golf heads-up display for Meta Ray-Ban Display glasses: a sta
 
 ## What is here
 
-Build 1 of the spec: the track engine and a desk replay harness.
+A first version of every build in the spec, at the desk: the track engine, the ghost race screen, the anchoring probe, the route guide and the golf display. [docs/results.md](docs/results.md) says how far each has been tested.
 
 | Folder | What it holds |
 | --- | --- |
@@ -57,7 +57,7 @@ Open `apps/ghost/` on the phone, outdoors, and allow location.
 3. Stop at a light and the clock stops with you. Set off and it starts again.
 4. Tap for the menu to finish. The run is saved on the phone and becomes a ghost for next time.
 
-Swipes are the arrow keys and a tap is Enter, which is all the glasses have. Keep the page open and the screen on: a phone that locks stops reporting where it is. A run in progress is written down every ten seconds, so if the page reloads or the phone drops it, the first row on the way back in is "Carry on the run in progress", for half an hour. The time away counts on the clock, and the distance across it is taken as a straight line. Runs are kept in the browser's storage on that device, the latest eight, and nowhere else. "Download my latest run" saves one as GPX.
+Swipes are the arrow keys and a tap is Enter, which is all the glasses have. Keep the page open and the screen on: a phone that locks stops reporting where it is. A run in progress is written down every ten seconds, so if the page reloads or the phone drops it, the first row on the way back in is "Carry on the run in progress", for half an hour. The time away counts on the clock, and the distance across it is taken as a straight line. Runs are kept in the browser's storage on that device, the latest twelve, and nowhere else. "Add past runs as ghosts" takes several GPX files at once, so a set of exports from Strava or a watch can be loaded in one go. "Download my latest run" saves one as GPX.
 
 Choosing the pace ghost brings your saved runs along. You run wherever you like against the pace; wherever your way joins the route of a saved run, in the same direction, that run's ghost takes over, a line across the road says so, and the gap carries on. When the routes part, the pace ghost takes back over. Where two saved runs cover the same ground, the more recent is used.
 
@@ -205,6 +205,7 @@ The course file is derived from OpenStreetMap, © OpenStreetMap contributors, an
 
 - **At the desk,** sliders say where you are on the hole, which way you face, how far your head is tilted, and the wind.
 - **On the course,** tick "Use this phone's position" and the hole is found from where you stand. Tick "Use this phone's compass and tilt" and hold the phone up like a viewfinder: facing sets look to range, and tipping it down hides the display as at address. Your position stays in the browser.
+- **Anywhere else,** "Put the made-up hole where I am standing" lays that hole on the ground from your position, playing the way you face. A park or a quiet street will do to try the phone's position, compass and tilt before a visit to the course.
 - **The bag** is the set of carry distances entered for it, editable on the page and kept on the device. When the green is out of reach the club offered is the longest whose landing zone stays out of trouble (the driver only from the tee); otherwise the one nearest the distance, or a part shot inside the shortest club.
 
 - **The course test** logs what a rangefinder or a course marker says beside what the app says, and keeps the tally against the targets: within 5 m on 9 of 10 readings for green distances (B7), the right feature 8 times in 10 for look to range (B9). A laser reads to the flag, wherever the hole is cut that day, so "I am at today's pin" takes where you stand as the pin for the rest of the day. The log stays on the device and downloads as CSV.

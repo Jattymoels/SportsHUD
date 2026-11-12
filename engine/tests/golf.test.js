@@ -8,7 +8,7 @@ import {
   carryInWind, landingZone, clubFor, zoneTouches, hazardsInPlay, lookTarget, lookAround, featuresOf,
   createAddressHider, scoreDistances, scoreLooks, DEFAULT_CLUBS, WIND_MODEL,
 } from '../index.js';
-import { HOLE, LAYOUT, at } from '../../fixtures/golf.mjs';
+import { HOLE, LAYOUT, at, layOut } from '../../fixtures/golf.mjs';
 
 const near = (actual, expected, tolerance, label = '') =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${label} expected ${expected} ± ${tolerance}, got ${actual}`);
@@ -232,4 +232,23 @@ test('B9 scoring: the right feature in 8 of 10 looks', () => {
   assert.deepEqual(scoreLooks(looks(8, 2)), { count: 10, right: 8, pass: true });
   assert.equal(scoreLooks(looks(7, 3)).pass, false);
   assert.equal(scoreLooks(looks(5, 0)).pass, null);
+});
+
+test('the made-up hole can be laid out anywhere, playing any way, and is the same hole', () => {
+  // Somewhere else entirely, with the tee shot played due east.
+  const here = { lat: 51.5, lon: -0.12 };
+  const { hole } = layOut(here, 90);
+  near(distanceTo(hole.tee, here), 0, 0.01, 'the tee is where you stand');
+  near(bearingTo(hole.tee, hole.line[1]), 90, 0.05, 'the tee shot plays east');
+  near(distanceTo(hole.tee, hole.line[1]), 220, 0.2);
+  // The same distances as on the grid: 150 m short of the green, front 136, back 164.
+  const along = (metres) => pointAlong(hole.line[1], bearingTo(hole.line[1], centreOf(hole.green)), metres);
+  const d = greenDistances(along(Math.hypot(70, 125) - 150), hole.green);
+  near(d.centre, 150, 0.3);
+  near(d.front, 136, 0.6);
+  near(d.back, 164, 0.6);
+  // The pond is still on the right of the tee shot: to the south when playing east.
+  const pond = centreOf(hole.hazards[1].shape);
+  assert.ok(pond.lat < hole.tee.lat, 'pond to the right');
+  near(turnBetween(90, bearingTo(hole.tee, pond)), 14.2, 0.2);
 });

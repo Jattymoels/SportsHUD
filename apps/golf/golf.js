@@ -6,7 +6,7 @@ import {
   bearingTo, distanceTo, pointAlong, centreOf, greenDistances, carryInWind, landingZone, clubFor, zoneTouches,
   hazardsInPlay, lookTarget, lookAround, featuresOf, createAddressHider, holeAt, nearestOnLine, cameraPose, angleBetween,
 } from '../../engine/index.js';
-import { HOLE } from '../../fixtures/golf.mjs';
+import { HOLE, layOut } from '../../fixtures/golf.mjs';
 import { loadSettings, saveSettings } from '../ghost/store.js';
 import { BAG } from './bag.js';
 import { initFieldTest } from './fieldtest.js';
@@ -294,6 +294,23 @@ async function toggleSensors() {
   }
 }
 
+/**
+ * Lay the made-up hole on the ground where the golfer is standing, its tee
+ * shot played the way they face (north without a compass). A hole to walk
+ * round anywhere: a park, a street, a garden.
+ */
+function holeHere() {
+  if (!state.fix) return showStatus('Tick "Use this phone\'s position" first, and wait for GPS.');
+  const facing = state.pose && $('sensors').checked ? state.pose.heading : 0;
+  const { hole } = layOut({ lat: state.fix.lat, lon: state.fix.lon }, facing);
+  state.course = { name: 'The made-up hole, where you stood', holes: [hole] };
+  $('course').value = 'made-up';
+  $('holeNo').replaceChildren(new Option('1  ·  par 4  ·  363 m', '1'));
+  setHole(hole);
+  showStatus(`The made-up hole is laid out from where you are standing, playing ${state.pose && $('sensors').checked ? `the way you face (${compassPoint(facing)})` : 'north'}. Walk it: the green is 363 m away along the hole.`);
+  render();
+}
+
 /** Take where the golfer is standing as today's pin on this hole. */
 function pinHere() {
   const w = state.last;
@@ -403,6 +420,7 @@ async function init() {
   state.test = initFieldTest({ now: () => state.last, say: showStatus });
   $('pinHere').addEventListener('click', pinHere);
   $('windNow').addEventListener('click', windNow);
+  $('holeHere').addEventListener('click', holeHere);
   buildBag();
   $('resetBag').addEventListener('click', () => {
     state.clubs = BAG.map((c) => ({ ...c }));

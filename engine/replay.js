@@ -13,6 +13,7 @@ import {
   compareGapSeries,
 } from './gap.js';
 import { speedOfPace, createPaceTracker, paceSeriesAfterwards } from './pace.js';
+import { createSegmentTracker } from './segments.js';
 
 /**
  * Fill the holes in a recording so it can stand in for live GPS.
@@ -101,28 +102,35 @@ export function createReplay(runnerFixes, makeTracker, options = {}) {
   };
 }
 
-/** Replay `saved` through a tracker and score the live readings against the afterwards ones. */
-function check(saved, makeTracker, afterwardsAt, options) {
+/** Replay the whole of `saved` through a tracker, and note what the recording was like. */
+function playThrough(saved, makeTracker, options) {
   const clock = options.clock ?? 'moving';
   const pauses = clock === 'elapsed' ? [] : findPauses(saved, options);
   const runnerFixes = options.fillGaps === false ? saved : fillGaps(saved);
   const replay = createReplay(runnerFixes, makeTracker, { ...options, pauses });
   const live = replay.advanceTo(replay.duration);
-  const afterwards = afterwardsAt(runnerFixes, live.map((s) => s.t), { ...options, pauses });
-  const stats = compareGapSeries(live, afterwards, options);
-  const scored = live.slice(0, stats.samples);
-  stats.tickS = replay.tickS;
-  stats.maxFixAge = scored.reduce((oldest, s) => Math.max(oldest, s.fixAge), 0);
-  // What the recording was like, for reading the result.
-  stats.clock = clock;
-  stats.pausedS = { runner: pauses.reduce((sum, p) => sum + p.end - p.start, 0) };
-  stats.holes = { count: 0, longestS: 0, filled: options.fillGaps !== false };
+  const about = {
+    tickS: replay.tickS,
+    clock,
+    pausedS: { runner: pauses.reduce((sum, p) => sum + p.end - p.start, 0) },
+    holes: { count: 0, longestS: 0, filled: options.fillGaps !== false },
+  };
   for (let i = 1; i < saved.length; i++) {
     const hole = saved[i].t - saved[i - 1].t;
     if (hole <= 2) continue;
-    stats.holes.count++;
-    stats.holes.longestS = Math.max(stats.holes.longestS, hole);
+    about.holes.count++;
+    about.holes.longestS = Math.max(about.holes.longestS, hole);
   }
+  return { runnerFixes, pauses, live, about };
+}
+
+/** Replay `saved` through a tracker and score the live readings against the afterwards ones. */
+function check(saved, makeTracker, afterwardsAt, options) {
+  const { runnerFixes, pauses, live, about } = playThrough(saved, makeTracker, options);
+  const afterwards = afterwardsAt(runnerFixes, live.map((s) => s.t), { ...options, pauses });
+  const stats = Object.assign(compareGapSeries(live, afterwards, options), about);
+  const scored = live.slice(0, stats.samples);
+  stats.maxFixAge = scored.reduce((oldest, s) => Math.max(oldest, s.fixAge), 0);
   return { runnerFixes, pauses, live, afterwards, stats, scored };
 }
 
@@ -175,4 +183,72 @@ export function checkPace(recording, secondsPerKm, options = {}) {
   const last = scored.length - 1;
   result.stats.distance = { live: scored[last].dist, afterwards: result.afterwards[last].dist };
   return { speed, ...result };
+}
+
+const median = (values) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted.length ? sorted[sorted.length >> 1] : 0;
+};
+
+/**
+ * The B12 check, live segments: replay a recording against a ghost holding
+ * `secondsPerKm`, with recorded ghosts taking over wherever its route shares
+ * theirs, and look at every change of ghost.
+ *
+ * There is no gap computed afterwards to compare with here. What is checked
+ * is that the gap does not jump when the ghost changes: the change in the
+ * gap over the second of the switch, beyond how it was changing in the
+ * seconds either side, must be within `jumpS`. When each switch happened is
+ * reported; whether that was soon enough needs to know when the runner
+ * really joined and left, which only a made-up recording can say.
+ *
+ * @param {Array} ghostRecordings from parseGpx; where two fit, the earlier in the list is used
+ * @param runnerRecording from parseGpx
+ * @param {number} secondsPerKm the pace the ghost holds away from any recording
+ * @param {{clock?: 'moving'|'elapsed', fillGaps?: boolean, jumpS?: number}} [options] as for checkB1
+ * @returns `switches`: one per change of ghost, `{t, to, track, dist, routeDist, timeGap, jump}`.
+ *   `stretches`: the spells on a recording, `{from, to, track}` in seconds.
+ */
+export function checkSegments(ghostRecordings, runnerRecording, secondsPerKm, options = {}) {
+  const jumpS = options.jumpS ?? 1;
+  const prepared = ghostRecordings.map((recording) => prepareGhost(recording, options));
+  const tracks = prepared.map(({ route, ghost }) => ({ route, profile: ghost }));
+  const { about, ...result } = playThrough(
+    toFixes(runnerRecording),
+    () => createSegmentTracker({ secondsPerKm, tracks }, options),
+    options,
+  );
+  const { live } = result;
+
+  const step = (i) => live[i].timeGap - live[i - 1].timeGap;
+  const switched = (i) => i > 0 && i < live.length && (live[i].ghost !== live[i - 1].ghost || live[i].track !== live[i - 1].track);
+  const switches = [];
+  const stretches = [];
+  let maxStep = 0;
+  for (let i = 1; i < live.length; i++) {
+    maxStep = Math.max(maxStep, Math.abs(step(i)));
+    if (!switched(i)) continue;
+    const around = [];
+    for (let k = i - 3; k <= i + 3; k++) if (k !== i && k > 0 && k < live.length && !switched(k)) around.push(step(k));
+    const r = live[i];
+    switches.push({ t: r.t, to: r.ghost, track: r.track, dist: r.dist, routeDist: r.routeDist, timeGap: r.timeGap, jump: Math.abs(step(i) - median(around)) });
+    if (stretches.length && stretches[stretches.length - 1].to == null) stretches[stretches.length - 1].to = r.t;
+    if (r.ghost === 'recording') stretches.push({ from: r.t, to: null, track: r.track });
+  }
+  if (stretches.length && stretches[stretches.length - 1].to == null) stretches[stretches.length - 1].to = live[live.length - 1].t;
+
+  const maxSwitchJump = switches.reduce((most, s) => Math.max(most, s.jump), 0);
+  const stats = {
+    ...about,
+    samples: live.length,
+    maxFixAge: live.reduce((oldest, s) => Math.max(oldest, s.fixAge), 0),
+    jumpS,
+    maxSwitchJump,
+    maxStep,
+    pass: maxSwitchJump <= jumpS,
+    onRecordingS: live.filter((s) => s.ghost === 'recording').length * about.tickS,
+    distance: live[live.length - 1].dist,
+  };
+  stats.pausedS.ghosts = prepared.map(({ pauses }) => pauses.reduce((sum, p) => sum + p.end - p.start, 0));
+  return { tracks, secondsPerKm, ...result, switches, stretches, stats };
 }

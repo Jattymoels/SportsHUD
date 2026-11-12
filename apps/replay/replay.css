@@ -52,7 +52,8 @@ h2 { margin: 0 0 8px; font-size: 15px; }
 .note { margin: 0 0 8px; max-width: 80ch; }
 
 .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin-bottom: 10px; }
-.bar label { display: grid; gap: 3px; font-size: 13px; color: var(--ink-2); }
+.bar label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; font-size: 13px; color: var(--ink-2); max-width: 100%; }
+.bar select { max-width: 100%; min-width: 0; }
 .transport { align-items: center; }
 .transport label { display: flex; align-items: center; gap: 6px; }
 #scrub { flex: 1 1 220px; min-width: 160px; }
@@ -92,11 +93,15 @@ button:hover { border-color: var(--muted); }
 .key.ghost { background: var(--ghost); }
 .key.after { background: var(--after); }
 .key.raw { background: var(--muted); width: 7px; height: 7px; }
+.key.track { background: var(--ghost); opacity: 0.45; height: 5px; border-radius: 3px; }
+.key.band.stretch { background: var(--ghost); opacity: 0.25; }
 
 .plot svg { display: block; width: 100%; height: auto; }
 .plot text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .plot .label { fill: var(--ink-2); font-size: 12px; }
 .plot .route { fill: none; stroke: var(--axis); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.plot .route.track { stroke: var(--ghost); stroke-width: 7; opacity: 0.3; }
+.plot .stretch { fill: var(--ghost); opacity: 0.13; }
 .plot .gridline { stroke: var(--grid); stroke-width: 1; }
 .plot .zero { stroke: var(--axis); stroke-width: 1; }
 .plot .series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }

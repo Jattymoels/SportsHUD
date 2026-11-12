@@ -12,7 +12,10 @@ import { buildFixtures } from '../../fixtures/generate.mjs';
 
 const fixtures = new URL('../../fixtures/', import.meta.url);
 const read = (path) => readFileSync(new URL(path, fixtures), 'utf8');
-const { pairs } = JSON.parse(read('index.json'));
+const index = JSON.parse(read('index.json'));
+// Pairs of recordings of the same route. (A pair marked `segments` shares
+// only part of a route; segments.test.js covers it.)
+const pairs = index.pairs.filter((p) => !p.segments);
 const b1 = (pair, clock) => checkB1(parseGpx(read(pair.ghost)), parseGpx(read(pair.runner)), { clock }).stats;
 const summary = (s) =>
   `${(100 * s.within).toFixed(1)}% within ${s.targetS} s (${(100 * s.withinSameInstant).toFixed(1)}% at the same instant), worst ${s.maxTimeError.toFixed(2)} s, ${s.samples} readings`;

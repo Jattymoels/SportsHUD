@@ -56,7 +56,7 @@ The ghost does not have to be a recording of the route being run:
 | A friend's run or a personal best on the same route | Racing | Replays the recording, as in B1 |
 | A past run carried onto a different route | Its ups and downs no longer line up with anything there | Falls back to a set pace: that run's average |
 
-**Live segments.** Wanted: where the route being run overlaps a stretch that a recorded ghost has run, that stretch switches to the recording's own pacing, and the set pace covers everything else.
+**Live segments.** Where the route being run overlaps a stretch that a recorded ghost has run, in the same direction, that stretch switches to the recording's own pacing, and the set pace covers everything else. The gap carries on through each switch rather than jumping (agreed 2026-11-12). Built in the engine and the desk harness; not yet in the phone app. Which recording wins where two overlap is left for later: for now, the first in the list.
 
 Two more behaviours follow. The targets are proposals, like the others.
 
@@ -149,7 +149,8 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 ## Open questions
 
 - [x] Two GPX recordings of the same running route, for B1. Supplied 2026-11-11; B1 passes on them at the desk.
-- [x] The pace ghost: which pace? Answered 2026-11-11; see "Pace ghost" above. A set pace is built at the desk. Live segments are not.
+- [x] The pace ghost: which pace? Answered 2026-11-11; see "Pace ghost" above. A set pace and live segments are both built at the desk.
+- [ ] A recording of a run that shares only part of the commute route, to try live segments on real ground. So far it has been tried on a made-up run, and on the two commute runs with one cut down to its middle.
 - [ ] What distance does the watch or Strava show for the two test runs? Needed to check the distance target in B11.
 - [ ] Grange or West Beach? Check how well each is mapped in OpenStreetMap before choosing.
 - [ ] Approximate carry distance for each club, needed before build 5.

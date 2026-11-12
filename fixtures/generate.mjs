@@ -7,6 +7,9 @@
 // it). Because the true position of each effort is known at every instant,
 // tests can check the engine against the truth, which real recordings never
 // allow. Output is deterministic: the same code always writes the same files.
+//
+// One more recording, SHARED_RUN, is a different run that shares only part
+// of the run's route, for live segments.
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -54,6 +57,28 @@ function runPath() {
   const back = [...out].reverse().slice(1);
   const loop = curve([[0, 0], [-50, 150], [50, 330], [250, 380], [400, 250], [300, 80], [260, -80], [120, -150], [-30, -80], [0, 0]]).slice(1);
   return [...out, ...back, ...loop];
+}
+
+/**
+ * A different run that shares a stretch of the run path's loop, in the same
+ * direction: in from the west, onto the loop for about 800 m, off to the
+ * east. It turns onto the loop and off it at corners, as at street corners,
+ * so the moments of joining and leaving are definite.
+ * @returns the path, and where the shared stretch starts and ends as indexes
+ *   into this path (`own`) and into the run path (`route`).
+ */
+function sharedRunPath() {
+  const run = runPath();
+  const indexOf = ([x, y]) => run.findIndex((p) => p[0] === x && p[1] === y);
+  const from = indexOf([-50, 150]);
+  const to = indexOf([300, 80]);
+  const leadIn = curve([[-330, 110], [-230, 160], [-130, 140], [-50, 150]]).slice(0, -1);
+  const leadOut = curve([[300, 80], [380, 90], [480, 140], [600, 150]]).slice(1);
+  return {
+    xy: [...leadIn, ...run.slice(from, to + 1), ...leadOut],
+    own: [leadIn.length, leadIn.length + to - from],
+    route: [from, to],
+  };
 }
 
 /** Three laps of one circuit: every lap lies exactly on top of the others. */
@@ -139,6 +164,30 @@ export const SCENARIOS = [
     },
   },
 ];
+
+const sharedRun = sharedRunPath();
+const sharedPath = measure(sharedRun.xy);
+
+/**
+ * A run that shares part of the synthetic run's route. `shares` says where,
+ * in metres: `own` along this run's path, `route` along the run scenario's.
+ * It stops once on the way in, and is faster than effort `a` of the run.
+ */
+export const SHARED_RUN = {
+  id: 'run-shared',
+  label: 'Run sharing part of the route',
+  gpxType: 'running',
+  path: sharedPath,
+  efforts: {
+    a: { start: '2026-10-17T21:31:00Z', speed: 3.2, swing: 0.07, stops: [{ at: 150, for: 25 }], autoPause: true, seed: 41 },
+  },
+  shares: {
+    with: 'run',
+    own: sharedRun.own.map((i) => sharedPath.cum[i]),
+    route: sharedRun.route.map((i) => SCENARIOS[0].path.cum[i]),
+  },
+  secondsPerKm: 315, // the pace ghost it is replayed against
+};
 
 // ----------------------------------------------------------- simulation --
 
@@ -237,7 +286,7 @@ export function toGpx(scenario, who, fixes) {
   const effort = scenario.efforts[who];
   const t0 = Date.parse(effort.start);
   const stamp = (t) => new Date(t0 + t * 1000).toISOString().replace('.000Z', 'Z');
-  const name = `Synthetic ${scenario.label.toLowerCase()} ${who.toUpperCase()}`;
+  const name = scenario.efforts.b ? `Synthetic ${scenario.label.toLowerCase()} ${who.toUpperCase()}` : `Synthetic ${scenario.label.toLowerCase()}`;
   const lines = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<gpx version="1.1" creator="SportsHUD fixtures/generate.mjs" xmlns="http://www.topografix.com/GPX/1/1">',
@@ -252,6 +301,7 @@ export function toGpx(scenario, who, fixes) {
 }
 
 export const fixturePath = (scenario, who) => `synthetic/${scenario.id}-${who}.gpx`;
+export const SHARED_RUN_PATH = `synthetic/${SHARED_RUN.id}.gpx`;
 
 /** Every fixture file as { path: GPX text }, plus the list the harness and tests read. */
 export function buildFixtures() {
@@ -269,6 +319,21 @@ export function buildFixtures() {
       synthetic: true,
     });
   }
+  // The run that shares part of the route, against effort `a` of the run.
+  const shared = simulate(SHARED_RUN, 'a');
+  const secondsTo = (metres) => Math.round(shared.truth.findIndex((d) => d >= metres) * shared.step);
+  files[SHARED_RUN_PATH] = toGpx(SHARED_RUN, 'a', shared.fixes);
+  pairs.push({
+    id: 'shared',
+    label: `${SHARED_RUN.label} (synthetic)`,
+    ghost: fixturePath(SCENARIOS[0], 'a'),
+    runner: SHARED_RUN_PATH,
+    synthetic: true,
+    segments: true,
+    secondsPerKm: SHARED_RUN.secondsPerKm,
+    // When it truly joins and leaves the shared stretch, seconds from its start.
+    shared: { joinS: secondsTo(SHARED_RUN.shares.own[0]), leaveS: secondsTo(SHARED_RUN.shares.own[1]) },
+  });
   files['index.json'] = JSON.stringify({ pairs }, null, 2) + '\n';
   return files;
 }

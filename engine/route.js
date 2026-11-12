@@ -119,9 +119,11 @@ const WRONG_WAY_SIGMAS = 4;
  * @param {number} [opts.nearSigma] how uncertain `near` is, metres
  * @param {number} [opts.gpsSigma] how uncertain the position is, metres
  * @param {[number, number]} [opts.heading] unit vector of travel in the route's x/y frame
- * @returns {{dist:number, offset:number, dir:[number, number]}} metres along
- *   the route, metres between the position and the route, and the route's
- *   direction there as a unit vector in its x/y frame.
+ * @returns {{dist:number, offset:number, dir:[number, number], edge:boolean}}
+ *   metres along the route, metres between the position and the route, and
+ *   the route's direction there as a unit vector in its x/y frame. edge: the
+ *   match is at the end of the stretch searched and the route just beyond
+ *   fits better, so the true match is probably further on than `window`.
  */
 export function snapToRoute(route, lat, lon, opts = {}) {
   const { near = null, window = Infinity, nearSigma = 5, gpsSigma = 3, heading = null, startTolerance = 15 } = opts;
@@ -132,7 +134,7 @@ export function snapToRoute(route, lat, lon, opts = {}) {
 
   const hits = [];
   for (let i = from; i <= to; i++) hits.push(projectOnSegment(route, i, px, py));
-  const result = (hit) => ({ dist: hit.dist, offset: Math.sqrt(hit.offset2), dir: [hit.ux, hit.uy] });
+  const result = (hit, edge = false) => ({ dist: hit.dist, offset: Math.sqrt(hit.offset2), dir: [hit.ux, hit.uy], edge });
 
   if (near == null) {
     const best = Math.sqrt(hits.reduce((least, h) => Math.min(least, h.offset2), Infinity));
@@ -142,13 +144,15 @@ export function snapToRoute(route, lat, lon, opts = {}) {
     return result(hits[i]);
   }
 
-  for (const h of hits) {
+  const price = (h) => {
     h.cost = h.offset2 / gpsSigma ** 2;
     if (heading) {
       const along = h.ux * heading[0] + h.uy * heading[1]; // 1 with the route, -1 against it
       if (along < 0) h.cost += (WRONG_WAY_SIGMAS * along) ** 2;
     }
-  }
+    return h;
+  };
+  hits.forEach(price);
   // One candidate per pass of the route: the local minima of the cost.
   let chosen = null;
   let bestScore = Infinity;
@@ -162,7 +166,9 @@ export function snapToRoute(route, lat, lon, opts = {}) {
       chosen = h;
     }
   }
-  return result(chosen);
+  const beyond = (i) => i >= 0 && i <= lastSeg && price(projectOnSegment(route, i, px, py)).cost < chosen.cost;
+  const edge = (chosen === hits[0] && beyond(from - 1)) || (chosen === hits[hits.length - 1] && beyond(to + 1));
+  return result(chosen, edge);
 }
 
 /** The point `d` metres along the route, clamped to its ends. */

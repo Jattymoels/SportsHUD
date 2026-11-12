@@ -28,6 +28,7 @@ export const PROGRESS_DEFAULTS = {
   startSpeedSigma: 5, // m/s: how uncertain the speed is at the first fix
   headingBaseline: 3, // metres moved before the direction of travel is trusted
   headingMaxAge: 15, // seconds: older movement says nothing about the current direction
+  startNear: null, // metres along the route to expect the first fix at; by default, wherever fits best from the start
   offRoute: 15, // metres from the route beyond which a fix may count as off it
   alongRoute: 0.8, // how closely travel must follow the route's direction (1 = exactly) to count as on it anyway
 };
@@ -73,7 +74,7 @@ function createFilter(route, options) {
     };
 
     if (!s) {
-      const snap = snapToRoute(route, fix.lat, fix.lon);
+      const snap = o.startNear == null ? snapToRoute(route, fix.lat, fix.lon) : snapToRoute(route, fix.lat, fix.lon, { near: o.startNear, window: 2 * o.window, gpsSigma: baseSigma, heading });
       const sigma = Math.max(baseSigma, snap.offset / 2);
       s = { t: fix.t, d: snap.dist, v: 0, p00: sigma ** 2, p01: 0, p11: o.startSpeedSigma ** 2, offset: snap.offset, offRoute: isOff(snap) };
       return { pred: s, filt: s, cut: true };
@@ -91,7 +92,10 @@ function createFilter(route, options) {
     });
     const sigma = Math.max(baseSigma, snap.offset / 2);
 
-    if (isOff(snap)) {
+    // While progress is held, a match at the very end of the stretch searched
+    // is not a return to the route: the place they came back to is further
+    // on than the search reaches yet.
+    if (isOff(snap) || (s.offRoute && snap.edge)) {
       // Hold progress; let the uncertainty grow so the search widens.
       s = { t: fix.t, d: s.d, v: s.v, p00: pred.p00, p01: pred.p01, p11: pred.p11, offset: snap.offset, offRoute: true };
       return { pred: s, filt: s, cut: true };

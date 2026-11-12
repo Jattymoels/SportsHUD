@@ -129,11 +129,11 @@ export function ghostFromFixes(fixes, pauses, options) {
 }
 
 /**
- * Gap for a runner who is `dist` metres along the route at elapsed time `t`.
+ * When the ghost was at the place `dist` metres along the route: the time it
+ * arrived and the time it left. The two differ only where it stood still.
  * @param ghost a monotone profile, with `stops` from findStops if it has any
  */
-export function gapAt(ghost, t, dist) {
-  const ghostDist = distAtTime(ghost, t);
+export function passAt(ghost, dist) {
   let arrive = timeAtDist(ghost, dist);
   let depart = arrive;
   const stop = ghost.stops?.find((s) => dist >= s.lo && dist <= s.hi);
@@ -141,6 +141,16 @@ export function gapAt(ghost, t, dist) {
     arrive = Math.min(arrive, stop.arrive);
     depart = Math.max(depart, stop.depart);
   }
+  return { arrive, depart };
+}
+
+/**
+ * Gap for a runner who is `dist` metres along the route at elapsed time `t`.
+ * @param ghost a monotone profile, with `stops` from findStops if it has any
+ */
+export function gapAt(ghost, t, dist) {
+  const ghostDist = distAtTime(ghost, t);
+  const { arrive, depart } = passAt(ghost, dist);
   return {
     timeGap: t < arrive ? arrive - t : t > depart ? depart - t : 0,
     distGap: dist - ghostDist,

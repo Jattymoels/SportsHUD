@@ -71,6 +71,21 @@ test('on a loop, the first fix is placed at the start, not the finish', () => {
   near(snapToRoute(route, ...Object.values(at(103, 60))).dist, 160, 2.1);
 });
 
+test('a match at the end of the stretch searched says so when the route beyond fits better', () => {
+  const route = buildRoute(path([[0, 0], [1000, 0]]));
+  const here = Object.values(at(500, 2));
+  // Searching 350 to 450 m for someone who is really at 500 m.
+  const short = snapToRoute(route, ...here, { near: 400, window: 50 });
+  assert.ok(short.dist <= 455 && short.offset > 40, JSON.stringify(short));
+  assert.equal(short.edge, true);
+  // Searching far enough finds them, and that is no edge.
+  const found = snapToRoute(route, ...here, { near: 460, window: 50 });
+  near(found.dist, 500, 0.5);
+  assert.equal(found.edge, false);
+  // The end of the route itself is not an edge of the search.
+  assert.equal(snapToRoute(route, ...Object.values(at(1040, 0)), { near: 990, window: 50 }).edge, false);
+});
+
 test('pointAtDistance is the inverse of snapping', () => {
   const route = buildRoute(path([[0, 0], [300, 0], [300, 400]]));
   for (const d of [0, 123.4, 300, 512, route.length]) {

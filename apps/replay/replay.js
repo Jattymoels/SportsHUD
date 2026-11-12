@@ -7,10 +7,12 @@ import {
   pointAtDistance,
   createGapTracker,
   createPaceTracker,
+  createSegmentTracker,
   paceOf,
   createReplay,
   checkB1,
   checkPace,
+  checkSegments,
 } from '../../engine/index.js';
 
 const FIXTURES = new URL('../../fixtures/', import.meta.url);
@@ -32,6 +34,7 @@ function svgEl(name, attrs = {}, parent = null, text = null) {
 const state = {
   pairs: [],
   custom: { ghost: null, runner: null },
+  pair: null, // the fixture pair on screen, if it is one
   loaded: null, // the recordings on screen, kept so the clock or the ghost can be switched
   check: null, // the engine's check for what is loaded (route, whole-recording series, stats)
   replay: null,
@@ -81,6 +84,13 @@ async function fetchRecording(path) {
 async function loadPair(id) {
   const pair = state.pairs.find((p) => p.id === id);
   if (!pair) return;
+  if (pair.segments) {
+    // Two runs that share only part of a route: only live segments makes sense of them.
+    $('ghostMode').value = 'segments';
+    $('ghostPace').value = formatPace(pair.secondsPerKm);
+    showGhostMode();
+  }
+  state.pair = pair;
   try {
     const [ghost, runner] = await Promise.all([fetchRecording(pair.ghost), fetchRecording(pair.runner)]);
     start(ghost, runner);
@@ -94,15 +104,20 @@ function start(ghostRecording, runnerRecording) {
   const options = { clock: $('clockMode').value };
   let makeTracker;
   try {
-    if (mode === 'pace') {
-      const secondsPerKm = parsePace($('ghostPace').value);
-      if (!secondsPerKm) throw new Error('Enter the ghost\'s pace as minutes:seconds per km, for example 5:30.');
+    const secondsPerKm = mode === 'track' ? null : parsePace($('ghostPace').value);
+    if (mode !== 'track' && !secondsPerKm) throw new Error('Enter the ghost\'s pace as minutes:seconds per km, for example 5:30.');
+    if (mode !== 'pace' && !ghostRecording) throw new Error('Choose a Ghost GPX to race, or switch the ghost to a set pace.');
+    if (mode === 'segments') {
+      const result = checkSegments([ghostRecording], runnerRecording, secondsPerKm, options);
+      // Drawn on the runner's own track, with the ghost's route laid under it.
+      state.check = { ...result, mode, afterwards: [], route: buildRoute(result.runnerFixes) };
+      makeTracker = () => createSegmentTracker({ secondsPerKm, tracks: result.tracks });
+    } else if (mode === 'pace') {
       const result = checkPace(runnerRecording, secondsPerKm, options);
       // No ghost route here: draw the runner's own track and put the ghost on it.
       state.check = { ...result, mode, secondsPerKm, route: buildRoute(result.runnerFixes) };
       makeTracker = () => createPaceTracker(result.speed);
     } else {
-      if (!ghostRecording) throw new Error('Choose a Ghost GPX to race, or switch the ghost to a set pace.');
       const result = checkB1(ghostRecording, runnerRecording, options);
       state.check = { ...result, mode };
       makeTracker = () => createGapTracker(result.route, result.ghost);
@@ -127,7 +142,11 @@ function start(ghostRecording, runnerRecording) {
   state.playing = false;
   state.tableBuilt = false;
   $('scrub').max = Math.floor(state.replay.duration);
-  $('youKey').textContent = mode === 'pace' ? 'You' : 'You, snapped to the route';
+  $('youKey').textContent = mode === 'track' ? 'You, snapped to the route' : 'You';
+  $('trackKey').hidden = mode !== 'segments';
+  $('stretchKey').hidden = mode !== 'segments';
+  for (const key of document.querySelectorAll('.afterKey')) key.hidden = mode === 'segments';
+  $('offsetLabel').textContent = mode === 'segments' ? 'Ghost right now' : 'GPS fix to route';
   buildMap();
   buildChart();
   renderB1();
@@ -144,7 +163,7 @@ async function chooseFile(role, input) {
     showMessage(`${file.name}: ${error.message}`);
     return;
   }
-  const needsGhost = $('ghostMode').value === 'track';
+  const needsGhost = $('ghostMode').value !== 'pace';
   if (!state.custom.runner) {
     showMessage(`Loaded ${file.name}. Now choose your recording.`);
     return;
@@ -156,12 +175,13 @@ async function chooseFile(role, input) {
   const select = $('pair');
   if (![...select.options].some((o) => o.value === 'custom')) select.add(new Option('Your files', 'custom'));
   select.value = 'custom';
+  state.pair = null;
   start(state.custom.ghost, state.custom.runner);
 }
 
-/** Show the pace controls only when the ghost is a set pace. */
+/** Show the pace controls only when the ghost holds a set pace somewhere. */
 function showGhostMode() {
-  const pace = $('ghostMode').value === 'pace';
+  const pace = $('ghostMode').value !== 'track';
   $('paceBox').hidden = !pace;
   $('usePace').hidden = !pace;
 }
@@ -196,22 +216,30 @@ function buildMap() {
   const W = Math.max(260, box.clientWidth);
   const H = Math.round(clamp(W * 0.7, 220, 380));
   const pad = 26;
+  // Live segments: the routes the recorded ghosts ran, in the map's own frame.
+  const under = (state.check.tracks ?? []).map((track) => {
+    const xy = [];
+    for (let i = 0; i < track.route.x.length; i++) xy.push(route.proj.toXY(...track.route.proj.toLatLon(track.route.x[i], track.route.y[i])));
+    return xy;
+  });
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (let i = 0; i < route.x.length; i++) {
-    minX = Math.min(minX, route.x[i]);
-    maxX = Math.max(maxX, route.x[i]);
-    minY = Math.min(minY, route.y[i]);
-    maxY = Math.max(maxY, route.y[i]);
-  }
+  const include = (x, y) => {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  };
+  for (let i = 0; i < route.x.length; i++) include(route.x[i], route.y[i]);
+  for (const xy of under) for (const [x, y] of xy) include(x, y);
   const scale = Math.min((W - 2 * pad) / (maxX - minX || 1), (H - 2 * pad) / (maxY - minY || 1));
   const left = (W - (maxX - minX) * scale) / 2;
   const bottom = (H - (maxY - minY) * scale) / 2;
   const toPx = (x, y) => [left + (x - minX) * scale, H - bottom - (y - minY) * scale];
 
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Map of the route with your position and the ghost' }, box);
-  const points = [];
-  for (let i = 0; i < route.x.length; i++) points.push(toPx(route.x[i], route.y[i]).map((v) => v.toFixed(1)).join(','));
-  svgEl('polyline', { class: 'route', points: points.join(' ') }, svg);
+  const line = (xy) => xy.map(([x, y]) => toPx(x, y).map((v) => v.toFixed(1)).join(',')).join(' ');
+  for (const xy of under) svgEl('polyline', { class: 'route track', points: line(xy) }, svg);
+  svgEl('polyline', { class: 'route', points: line(Array.from(route.x, (x, i) => [x, route.y[i]])) }, svg);
 
   const [sx, sy] = toPx(route.x[0], route.y[0]);
   const [fx, fy] = toPx(route.x[route.x.length - 1], route.y[route.y.length - 1]);
@@ -247,9 +275,15 @@ function drawMap(now) {
     node.setAttribute('cy', py.toFixed(1));
     return [px, py];
   };
-  const g = pointAtDistance(route, now.ghostDist);
   const y = pointAtDistance(route, now.dist);
-  place(ghost, g.x, g.y);
+  if (now.ghost === 'recording') {
+    // The recorded ghost is on its own route, which may be leaving the runner's.
+    const there = pointAtDistance(state.check.tracks[now.track].route, now.ghostDist);
+    place(ghost, ...route.proj.toXY(there.lat, there.lon));
+  } else {
+    const g = pointAtDistance(route, now.ghostDist ?? now.dist - now.distGap);
+    place(ghost, g.x, g.y);
+  }
   const [yx, yy] = place(you, y.x, y.y);
   const fix = state.replay.lastFix();
   if (fix) {
@@ -295,7 +329,8 @@ function buildChart() {
   const x = (t) => m.left + (t / duration) * (W - m.left - m.right);
   const y = (gap) => m.top + ((hi - gap) / (hi - lo)) * (H - m.top - m.bottom);
 
-  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Time gap to the ghost over the recording: live readings and the gap computed afterwards' }, box);
+  const about = state.check.mode === 'segments' ? 'live readings, shaded where the recorded ghost was being raced' : 'live readings and the gap computed afterwards';
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Time gap to the ghost over the recording: ${about}` }, box);
 
   const yStep = niceStep((hi - lo) / 5);
   for (let v = Math.ceil(lo / yStep) * yStep; v <= hi; v += yStep) {
@@ -303,12 +338,16 @@ function buildChart() {
     svgEl('line', { class: value === 0 ? 'zero' : 'gridline', x1: m.left, x2: W - m.right, y1: y(value), y2: y(value) }, svg);
     svgEl('text', { x: m.left - 6, y: y(value) + 4, 'text-anchor': 'end' }, svg, value === 0 ? '0' : signed(value, 0));
   }
-  const xStep = [30, 60, 120, 300, 600, 900, 1800, 3600, 7200].find((s) => duration / s <= 8) ?? 14400;
+  const mostLabels = clamp(Math.floor((W - m.left - m.right) / 56), 2, 8);
+  const xStep = [30, 60, 120, 300, 600, 900, 1800, 3600, 7200].find((s) => duration / s <= mostLabels) ?? 14400;
   for (let t = 0; t <= duration; t += xStep) {
     const anchor = t === 0 ? 'start' : x(t) > W - m.right - 24 ? 'end' : 'middle';
     svgEl('text', { x: x(t), y: H - 8, 'text-anchor': anchor }, svg, clock(t));
   }
 
+  for (const stretch of state.check.stretches ?? []) {
+    svgEl('rect', { class: 'stretch', x: x(stretch.from).toFixed(1), y: m.top, width: Math.max(1, x(stretch.to) - x(stretch.from)).toFixed(1), height: H - m.top - m.bottom }, svg);
+  }
   const xy = (s, shift = 0) => `${x(s.t).toFixed(1)},${y(s.timeGap + shift).toFixed(1)}`;
   if (afterwards.length > 1) {
     const upper = afterwards.map((s) => xy(s, stats.targetS));
@@ -369,8 +408,13 @@ function showTip(event, t) {
   };
   row(null, clock(t), 'into the recording');
   row('you', live ? `${signed(live.timeGap, 1)} s` : 'not played yet', 'live');
-  row('after', after ? `${signed(after.timeGap, 1)} s` : 'finished', 'computed afterwards');
-  if (live && after) row(null, `${Math.abs(live.timeGap - after.timeGap).toFixed(1)} s`, 'apart');
+  if (state.check.mode === 'segments') {
+    const then = state.check.live[t];
+    if (then) row(null, then.ghost === 'recording' ? 'The recording' : 'The set pace', 'is the ghost here');
+  } else {
+    row('after', after ? `${signed(after.timeGap, 1)} s` : 'finished', 'computed afterwards');
+    if (live && after) row(null, `${Math.abs(live.timeGap - after.timeGap).toFixed(1)} s`, 'apart');
+  }
 
   tip.hidden = false;
   const card = tip.parentElement.getBoundingClientRect();
@@ -395,21 +439,68 @@ function drawReadout(reading) {
   $('timeGapSide').textContent = reading.finished ? `${side} at the finish` : side;
   $('distGap').textContent = `${signed(reading.distGap, 0)} m`;
   const done = (reading.dist / 1000).toFixed(2);
-  $('dist').textContent = state.check.mode === 'pace' ? `${done} km` : `${done} of ${(route.length / 1000).toFixed(2)} km`;
+  $('dist').textContent = state.check.mode === 'track' ? `${done} of ${(route.length / 1000).toFixed(2)} km` : `${done} km`;
   $('speedNow').textContent = `${(Math.max(0, reading.speed) * 3.6).toFixed(1)} km/h`;
   $('pace').textContent = reading.speed > 0.3 ? `${clock(1000 / reading.speed)} /km` : '–';
-  $('offset').textContent = reading.offset == null ? 'no route' : `${reading.offset.toFixed(1)} m${reading.offRoute ? ' (off route)' : ''}`;
+  if (state.check.mode === 'segments') $('offset').textContent = reading.ghost === 'recording' ? `the recording, ${(reading.routeDist / 1000).toFixed(2)} km along it` : 'the set pace';
+  else $('offset').textContent = reading.offset == null ? 'no route' : `${reading.offset.toFixed(1)} m${reading.offRoute ? ' (off route)' : ''}`;
   $('time').textContent = `${clock(reading.time)}${reading.paused ? ' (paused)' : ''}`;
 }
 
-function renderB1() {
-  const { stats, live, afterwards, route } = state.check;
+const km = (metres) => `${(metres / 1000).toFixed(2)} km`;
+
+function showCheck(title, note, pass, rows) {
+  $('checkTitle').textContent = title;
+  $('checkNote').textContent = note;
   const chip = $('verdict');
-  chip.className = `chip ${stats.pass ? 'pass' : 'fail'}`;
-  chip.replaceChildren(stats.pass ? '✓ ' : '✕ ');
+  chip.className = `chip ${pass ? 'pass' : 'fail'}`;
+  chip.replaceChildren(pass ? '✓ ' : '✕ ');
   const word = document.createElement('span');
-  word.textContent = stats.pass ? 'Pass' : 'Fail';
+  word.textContent = pass ? 'Pass' : 'Fail';
   chip.append(word);
+  const table = $('b1');
+  table.replaceChildren();
+  for (const [label, value] of rows) {
+    const tr = table.insertRow();
+    const th = document.createElement('th');
+    th.scope = 'row';
+    th.textContent = label;
+    tr.append(th);
+    tr.insertCell().textContent = value;
+  }
+}
+
+/** The live segments check (B12): when the ghost changed, and whether the gap jumped. */
+function renderSegments() {
+  const { stats, switches, stretches, live, secondsPerKm } = state.check;
+  const truth = state.pair?.shared;
+  const late = (t, trueT, did) => `${Math.abs(t - trueT)} s ${t >= trueT ? 'after' : 'before'} truly ${did} (${clock(trueT)}); `;
+  const rows = [
+    ['Ghost', `${formatPace(secondsPerKm)} per km, and the Ghost GPX where routes overlap`],
+    ['Clock', stats.clock === 'moving' ? `paused time not counted (you ${clock(stats.pausedS.runner)})` : 'never stops'],
+    ['Time racing the recording', `${clock(stats.onRecordingS)} of ${clock(live.length * stats.tickS)}, in ${stretches.length} ${stretches.length === 1 ? 'stretch' : 'stretches'}`],
+    ['Changes of ghost', String(switches.length)],
+    [`Largest jump in the gap at a change of ghost (target: within ${stats.jumpS} s)`, switches.length ? `${stats.maxSwitchJump.toFixed(2)} s` : 'no changes'],
+    ['Largest change in the gap in any one second', `${stats.maxStep.toFixed(2)} s`],
+    ...switches.slice(0, 12).map((s, i) => {
+      const known = truth && switches.length === 2;
+      const timing = !known ? '' : i === 0 ? late(s.t, truth.joinS, 'joining') : late(s.t, truth.leaveS, 'leaving');
+      const what = s.to === 'recording' ? 'The recording took over' : 'The set pace took over';
+      return [`${what} at ${clock(s.t)}, ${km(s.dist)} in`, `${timing}gap ${signed(s.timeGap, 1)} s`];
+    }),
+    ...(switches.length > 12 ? [['Further changes of ghost', `${switches.length - 12} more; see the readings table`]] : []),
+    ['Distance measured', km(stats.distance)],
+    ['Holes in your recording (watch paused), filled in for the replay', stats.holes.count ? `${stats.holes.count}, longest ${stats.holes.longestS.toFixed(0)} s` : 'none'],
+  ];
+  const note = truth
+    ? 'The whole recording is replayed in an instant when it loads. This one is made up, so the moments it truly joins and leaves the shared stretch are known; the target is a change of ghost within 5 s of each, with no jump in the gap.'
+    : 'The whole recording is replayed in an instant when it loads. The gap must not jump when the ghost changes. Whether each change came soon enough cannot be told from real recordings: nothing says when you truly joined or left the shared ground.';
+  showCheck('Live segments check (B12)', note, stats.pass, rows);
+}
+
+function renderB1() {
+  if (state.check.mode === 'segments') return renderSegments();
+  const { stats, live, afterwards, route } = state.check;
 
   let worstAt = 0;
   for (let i = 0; i < stats.samples; i++) {
@@ -418,8 +509,6 @@ function renderB1() {
   }
   const count = (n) => `${n.toLocaleString('en')} of ${stats.samples.toLocaleString('en')}`;
   const paceGhost = state.check.mode === 'pace';
-  const km = (metres) => `${(metres / 1000).toFixed(2)} km`;
-  $('checkTitle').textContent = paceGhost ? 'Pace ghost check for this recording' : 'B1 check for this pair';
   const paused = paceGhost ? `you ${clock(stats.pausedS.runner)}` : `you ${clock(stats.pausedS.runner)}, ghost ${clock(stats.pausedS.ghost)}`;
   const rows = [
     ...(paceGhost ? [['Ghost', `holds ${formatPace(state.check.secondsPerKm)} per km on your route`]] : []),
@@ -440,16 +529,12 @@ function renderB1() {
           ['Route length, from the ghost recording', km(route.length)],
         ]),
   ];
-  const table = $('b1');
-  table.replaceChildren();
-  for (const [label, value] of rows) {
-    const tr = table.insertRow();
-    const th = document.createElement('th');
-    th.scope = 'row';
-    th.textContent = label;
-    tr.append(th);
-    tr.insertCell().textContent = value;
-  }
+  showCheck(
+    paceGhost ? 'Pace ghost check for this recording' : 'B1 check for this pair',
+    'The whole recording is replayed in an instant when it loads. Each one-second live reading is compared with the gap computed afterwards from the complete recording.',
+    stats.pass,
+    rows,
+  );
 }
 
 function readingRows() {
@@ -465,8 +550,9 @@ function buildTable() {
   state.tableBuilt = true;
   const table = $('table');
   table.replaceChildren();
+  const segments = state.check.mode === 'segments';
   const head = table.createTHead().insertRow();
-  for (const title of ['Time', 'Live (s)', 'Afterwards (s)', 'Apart (s)', 'Live (m)', 'Afterwards (m)']) {
+  for (const title of segments ? ['Time', 'Gap (s)', 'Gap (m)', 'Ghost'] : ['Time', 'Live (s)', 'Afterwards (s)', 'Apart (s)', 'Live (m)', 'Afterwards (m)']) {
     const th = document.createElement('th');
     th.scope = 'col';
     th.textContent = title;
@@ -474,6 +560,13 @@ function buildTable() {
   }
   const body = table.createTBody();
   const cell = (value, digits) => (value == null ? '' : signed(value, digits));
+  if (segments) {
+    for (const s of state.check.live) {
+      const tr = body.insertRow();
+      for (const text of [clock(s.t), cell(s.timeGap, 1), cell(s.distGap, 0), s.ghost === 'recording' ? 'recording' : 'set pace']) tr.insertCell().textContent = text;
+    }
+    return;
+  }
   for (const [t, liveGap, afterGap, liveDist, afterDist] of readingRows()) {
     const tr = body.insertRow();
     const cells = [clock(t), cell(liveGap, 1), cell(afterGap, 1), afterGap == null ? '' : Math.abs(liveGap - afterGap).toFixed(1), cell(liveDist, 0), cell(afterDist, 0)];
@@ -482,8 +575,14 @@ function buildTable() {
 }
 
 function downloadCsv() {
-  const header = 't_s,live_time_gap_s,afterwards_time_gap_s,live_dist_gap_m,afterwards_dist_gap_m,dist_along_route_m,speed_mps,gps_offset_m,fix_age_s';
-  const lines = readingRows().map((row) => row.map((v) => (v == null ? '' : Number(v.toFixed(3)))).join(','));
+  const segments = state.check.mode === 'segments';
+  const header = segments
+    ? 't_s,live_time_gap_s,live_dist_gap_m,dist_m,speed_mps,on_recording,dist_along_recorded_route_m,fix_age_s'
+    : 't_s,live_time_gap_s,afterwards_time_gap_s,live_dist_gap_m,afterwards_dist_gap_m,dist_along_route_m,speed_mps,gps_offset_m,fix_age_s';
+  const rows = segments
+    ? state.check.live.map((s) => [s.t, s.timeGap, s.distGap, s.dist, s.speed, s.ghost === 'recording' ? 1 : 0, s.routeDist, s.fixAge])
+    : readingRows();
+  const lines = rows.map((row) => row.map((v) => (v == null ? '' : Number(v.toFixed(3)))).join(','));
   const url = URL.createObjectURL(new Blob([[header, ...lines].join('\n') + '\n'], { type: 'text/csv' }));
   const link = document.createElement('a');
   link.href = url;
@@ -570,7 +669,7 @@ async function init() {
   $('speed').addEventListener('change', (event) => setSpeed(Number(event.target.value)));
   if (params.get('clock') === 'elapsed') $('clockMode').value = 'elapsed';
   $('clockMode').addEventListener('change', restart);
-  if (params.get('ghost') === 'pace') $('ghostMode').value = 'pace';
+  if (['pace', 'segments'].includes(params.get('ghost'))) $('ghostMode').value = params.get('ghost');
   if (parsePace(params.get('pace') ?? '')) $('ghostPace').value = params.get('pace');
   showGhostMode();
   $('ghostMode').addEventListener('change', () => {
@@ -581,8 +680,10 @@ async function init() {
   $('usePace').addEventListener('click', useGhostPace);
   $('scrub').addEventListener('input', (event) => seek(Number(event.target.value)));
   $('pair').addEventListener('change', (event) => {
-    if (event.target.value === 'custom') start(state.custom.ghost, state.custom.runner);
-    else loadPair(event.target.value);
+    if (event.target.value === 'custom') {
+      state.pair = null;
+      start(state.custom.ghost, state.custom.runner);
+    } else loadPair(event.target.value);
   });
   $('ghostFile').addEventListener('change', (event) => chooseFile('ghost', event.target));
   $('runnerFile').addEventListener('change', (event) => chooseFile('runner', event.target));

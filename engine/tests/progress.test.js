@@ -145,6 +145,24 @@ test('far from the route but travelling along it still counts as on it', () => {
   }
 });
 
+test('a parallel street is off the route, however alike its direction', () => {
+  // The route runs east. The runner takes the next street over, 80 m north, for 300 m.
+  const route = buildRoute(path([[0, 0], [900, 0]]));
+  const taken = path([[0, 0], [200, 0], [200, 80], [500, 80], [500, 0], [900, 0]]);
+  const tracker = createProgressTracker(route);
+  for (const fix of steady(taken, 3)) {
+    tracker.update(fix);
+    const now = tracker.at(fix.t);
+    // On the other street (from 100 s to 190 s): held, not carried along as if on the route.
+    if (fix.t >= 110 && fix.t <= 185) {
+      assert.equal(now.offRoute, true, `at ${fix.t} s`);
+      assert.ok(now.dist < 260, `progress crept to ${now.dist.toFixed(0)} m at ${fix.t} s`);
+    }
+    // Back on it, picked up where the runner is: 160 m of side streets were not route.
+    if (fix.t === 250) near(now.dist, 250 * 3 - 160, 6, 'after rejoining');
+  }
+});
+
 test('hindsight does not reach across a stretch off the route', () => {
   const route = buildRoute(path([[0, 0], [300, 0], [300, 300]]));
   const fixes = steady(path([[0, 0], [240, 0], [300, 60], [300, 300]]), 3);

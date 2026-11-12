@@ -166,13 +166,15 @@ const load = (path) => parseGpx(readFileSync(new URL(path, fixtures), 'utf8'));
 const sharedPair = JSON.parse(readFileSync(new URL('index.json', fixtures), 'utf8')).pairs.find((p) => p.segments);
 
 for (const clock of ['moving', 'elapsed']) {
-  test(`B12, ${clock} clock: the recorded ghost takes over within 5 s of joining and of leaving the shared stretch, with no jump in the gap`, (t) => {
+  test(`B12, ${clock} clock: the recorded ghost takes over within 5 s of joining, hands back within 7 s of leaving, and the gap does not jump`, (t) => {
     const { switches, stretches, stats } = checkSegments([load(sharedPair.ghost)], load(sharedPair.runner), sharedPair.secondsPerKm, { clock });
     const { joinS, leaveS } = sharedPair.shared;
     t.diagnostic(`joins at ${joinS} s, leaves at ${leaveS} s; switches at ${switches.map((s) => `${s.t} s to ${s.to}`).join(', ')}; biggest jump at a switch ${stats.maxSwitchJump.toFixed(2)} s, biggest change in any second ${stats.maxStep.toFixed(2)} s`);
     assert.deepEqual(switches.map((s) => s.to), ['recording', 'pace'], 'one stretch on the recording');
     near(switches[0].t, joinS, 5, 'took over');
-    near(switches[1].t, leaveS, 5, 'handed back');
+    // Two seconds longer than joining: one stray fix off the route must not
+    // hand over, so leaving has to last a second before it counts.
+    near(switches[1].t, leaveS, 7, 'handed back');
     assert.equal(stats.pass, true);
     assert.ok(stats.maxSwitchJump < 0.5, `jump at a switch ${stats.maxSwitchJump.toFixed(2)} s`);
     assert.ok(stats.maxStep < 1.5, `biggest change in one second ${stats.maxStep.toFixed(2)} s`);

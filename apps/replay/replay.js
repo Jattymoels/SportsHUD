@@ -493,7 +493,7 @@ function renderSegments() {
     ['Holes in your recording (watch paused), filled in for the replay', stats.holes.count ? `${stats.holes.count}, longest ${stats.holes.longestS.toFixed(0)} s` : 'none'],
   ];
   const note = truth
-    ? 'The whole recording is replayed in an instant when it loads. This one is made up, so the moments it truly joins and leaves the shared stretch are known; the target is a change of ghost within 5 s of each, with no jump in the gap.'
+    ? 'The whole recording is replayed in an instant when it loads. This one is made up, so the moments it truly joins and leaves the shared stretch are known; the target is a change of ghost within 5 s of joining and 7 s of leaving, with no jump in the gap.'
     : 'The whole recording is replayed in an instant when it loads. The gap must not jump when the ghost changes. Whether each change came soon enough cannot be told from real recordings: nothing says when you truly joined or left the shared ground.';
   showCheck('Live segments check (B12)', note, stats.pass, rows);
 }

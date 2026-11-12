@@ -55,3 +55,4 @@ export {
   ADDRESS_DEFAULTS,
   createAddressHider,
 } from './golf.js';
+export { COURSE_DEFAULTS, courseFromOsm, holeAt, nearestOnLine } from './course.js';

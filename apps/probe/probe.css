@@ -50,3 +50,16 @@ label.check { display: flex; align-items: center; gap: 8px; }
 
 /* The results table has six columns: on a narrow screen it scrolls sideways within its own box. */
 #results { display: block; max-width: 100%; overflow-x: auto; }
+
+/* With the camera's own tracking on, the browser shows the camera picture and lays the stage over it, full screen. */
+#stage.tracking { position: fixed; inset: 0; z-index: 10; width: 100%; height: 100%; max-height: none; aspect-ratio: auto; background: transparent; }
+#stage.tracking #camera { display: none; }
+/* The bar sits at the top: the pace and the gap are drawn along the bottom of the picture. */
+#trackBar { position: absolute; left: 12px; right: 12px; top: 12px; padding: 8px 10px; background: rgba(0, 0, 0, 0.7); border-radius: 8px; }
+#trackBar button { min-height: 40px; padding: 6px 12px; font-size: 15px; }
+#stage.tracking #notice { top: auto; bottom: 24%; }
+body:has(#stage.tracking) #controls { visibility: hidden; }
+#trackBar .row { margin: 0; }
+#trackStatus { margin: 0 0 8px; color: #f4f4ee; font-size: 14px; }
+#trackBox { margin: 0 0 14px; }
+#trackBox button { width: 100%; margin-bottom: 6px; }

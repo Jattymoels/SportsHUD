@@ -5,8 +5,13 @@
 //
 // Position along the route comes from the engine, as everywhere else. The
 // one new live input is which way the phone is facing.
+//
+// There are two ways of knowing that. The compass, steadied and corrected by
+// the engine. Or, where the browser can track the phone's own movement
+// through its camera, that tracking: far steadier than any compass, but with
+// no idea where north is until the engine has lined its path up with GPS.
 
-import { ghostFromFixes, paceProfile, createProgressTracker, createRunSession, cameraPose, angleBetween, createHeadingFuser, turnRate } from '../../engine/index.js';
+import { ghostFromFixes, paceProfile, createProgressTracker, createRunSession, cameraPose, trackedPose, angleBetween, createHeadingFuser, turnRate, createAligner } from '../../engine/index.js';
 import { drawScene, steady } from '../preview/scene.js';
 import { clock, km, pace } from '../ghost/hud.js';
 import { loadRuns, saveRuns, loadSettings, saveSettings, fixesOf, runFromGpx, loadSample } from '../ghost/store.js';
@@ -84,6 +89,7 @@ function setCourse() {
 function onFix(fix) {
   state.gpsError = null;
   state.lastFix = { ...fix, at: performance.now() };
+  pairWithTracking(fix);
   if (!state.course) return;
   if (state.session) state.session.update({ ...fix, t: fix.t ?? state.source.elapsed() });
   else state.tracker.update({ ...fix, t: performance.now() / 1000 });
@@ -122,9 +128,10 @@ function onOrientation(event) {
   fuser.compass(raw.yaw / RAD, seconds());
   const fused = fuser.at(seconds());
   // With the correction switched off, the compass as it comes, steadied a little.
-  const before = state.pose ?? raw;
   const plain = (state.compass ?? raw.yaw) + angleBetween(state.compass ?? raw.yaw, raw.yaw) * 0.25;
   state.compass = plain;
+  if (tracking.session) return; // the camera's tracking says how the phone is held; the compass is only a first guess at north
+  const before = state.pose ?? raw;
   state.pose = {
     yaw: $('correct').checked ? fused.yaw * RAD : plain,
     pitch: before.pitch + (raw.pitch - before.pitch) * 0.25,
@@ -138,6 +145,12 @@ function onMotion(event) {
   if (rate != null) fuser.gyro(rate, seconds());
 }
 
+function closeCamera() {
+  for (const track of $('camera').srcObject?.getTracks() ?? []) track.stop();
+  $('camera').srcObject = null;
+  state.camera = false;
+}
+
 async function openCamera() {
   if (state.demo || !navigator.mediaDevices?.getUserMedia) return;
   try {
@@ -146,6 +159,131 @@ async function openCamera() {
   } catch {
     state.camera = false;
   }
+}
+
+// ------------------------------------------------- the camera's tracking --
+
+// Where the browser offers it (Chrome on an Android phone; glasses running
+// Android XR), the device follows its own movement through its camera, to
+// centimetres, in a frame of its own. The browser shows the camera picture
+// and this page is laid over it.
+const tracking = {
+  session: null,
+  space: null,
+  gl: null,
+  aligner: null, // lines the tracked path up with GPS to find north
+  own: null, // { yaw, pitch, roll } in the tracking's own frame
+  place: null, // { x, z }: where the phone is in that frame
+  trail: [], // { at, x, z }: where it has just been, to match a GPS fix to the moment it was taken
+  lost: false, // the tracking has lost its footing for the moment
+  guess: null, // degrees: the bearing of the frame as first guessed, from the compass or from facing along the route
+  bearing: null, // degrees: the bearing of the frame in use, eased towards the best answer so far
+  fov: null, // degrees the camera picture spans, left to right
+  at: null,
+};
+const turnTo = (from, to) => ((((to - from) % 360) + 540) % 360) - 180;
+
+async function offerTracking() {
+  let offered = false;
+  try {
+    offered = Boolean(await navigator.xr?.isSessionSupported('immersive-ar'));
+  } catch {
+    offered = false;
+  }
+  $('trackBox').hidden = !offered;
+}
+
+async function startTracking() {
+  if (tracking.session) return;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl', { xrCompatible: true });
+    if (!gl) throw new Error('This browser could not start its graphics for tracking.');
+    closeCamera(); // the tracking needs the camera to itself
+    const session = await navigator.xr.requestSession('immersive-ar', { optionalFeatures: ['dom-overlay'], domOverlay: { root: $('stage') } });
+    if (!session.domOverlayState) {
+      await session.end();
+      throw new Error('This browser tracks, but cannot lay a page over the camera picture.');
+    }
+    // Nothing of ours is drawn in the tracked layer: it stays clear so the camera picture shows.
+    session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+    const space = await session.requestReferenceSpace('local');
+    Object.assign(tracking, { session, space, gl, aligner: createAligner(), own: null, place: null, trail: [], lost: false, guess: null, bearing: null, fov: null, at: null });
+    // If the tracking starts over from a new origin, what was learned about north goes with it.
+    space.addEventListener('reset', () => Object.assign(tracking, { aligner: createAligner(), guess: null, bearing: null, trail: [] }));
+    session.addEventListener('end', stopTracking);
+    $('stage').classList.add('tracking');
+    $('trackBar').hidden = false;
+    state.camera = true;
+    session.requestAnimationFrame(onTracked);
+  } catch (error) {
+    notice(error.message || 'The camera\'s tracking could not be started.');
+    if (!tracking.session) openCamera();
+  }
+}
+
+function stopTracking() {
+  if (!tracking.session) return;
+  tracking.session = null;
+  $('stage').classList.remove('tracking');
+  $('trackBar').hidden = true;
+  state.pose = null;
+  state.camera = false;
+  openCamera();
+  requestAnimationFrame(frame);
+}
+
+/** Each picture the tracking produces: where the phone is and how it is held, then draw. */
+function onTracked(time, xrFrame) {
+  const t = tracking;
+  if (!t.session) return;
+  t.session.requestAnimationFrame(onTracked);
+  t.gl.bindFramebuffer(t.gl.FRAMEBUFFER, t.session.renderState.baseLayer.framebuffer);
+  t.gl.clearColor(0, 0, 0, 0);
+  t.gl.clear(t.gl.COLOR_BUFFER_BIT);
+  const viewer = xrFrame.getViewerPose(t.space);
+  t.lost = !viewer || viewer.emulatedPosition;
+  if (viewer) {
+    const where = viewer.transform.position;
+    t.own = trackedPose(viewer.transform.orientation);
+    t.place = { x: where.x, z: where.z };
+    const now = performance.now();
+    t.trail.push({ at: now, ...t.place });
+    while (t.trail.length && now - t.trail[0].at > 3000) t.trail.shift();
+    const across = viewer.views[0]?.projectionMatrix[0];
+    if (across > 0) t.fov = (2 * Math.atan(1 / across)) / RAD;
+
+    // Which way the tracking's frame points. First a guess: from the compass
+    // if there is one, or else taking it that the phone began facing along
+    // the route. Then, once the phone has moved, from its path against GPS.
+    if (t.guess == null) {
+      const here = state.course && position();
+      const facing = state.compass != null ? state.compass : here ? routeBearing(state.course.route, here.dist) : null;
+      if (facing != null) t.guess = (((facing - t.own.yaw) / RAD) % 360 + 360) % 360;
+    }
+    const found = t.aligner.state();
+    const best = found.bearing ?? (t.guess == null ? null : t.guess + state.settings.offset);
+    if (best != null) {
+      const dt = t.at == null ? 0 : Math.min(1, (now - t.at) / 1000);
+      t.bearing = t.bearing == null ? best : t.bearing + turnTo(t.bearing, best) * (1 - Math.exp(-dt / 1.5));
+    }
+    t.at = now;
+    if (t.bearing != null) state.pose = { yaw: t.bearing * RAD + t.own.yaw, pitch: t.own.pitch, roll: t.own.roll };
+  }
+  draw();
+}
+
+/** A GPS fix and where the tracking had the phone when that fix was taken: one more pair for finding north. */
+function pairWithTracking(fix) {
+  const t = tracking;
+  if (!t.session || t.lost || !t.trail.length) return;
+  // A fix arrives a little after it was taken; look back along the trail by that much.
+  const age = fix.stamp ? clamp(Date.now() - fix.stamp, 0, 2000) : 0;
+  const when = performance.now() - age;
+  let then = t.trail[t.trail.length - 1];
+  for (const point of t.trail) {
+    if (Math.abs(point.at - when) < Math.abs(then.at - when)) then = point;
+  }
+  t.aligner.add({ x: then.x, z: then.z, lat: fix.lat, lon: fix.lon, accuracy: fix.accuracy });
 }
 
 // ---------------------------------------------------------- heading check --
@@ -157,7 +295,10 @@ function routeBearing(route, dist) {
   return Math.atan2(to.x - from.x, to.y - from.y);
 }
 
-/** On each fix while moving along the route: how far the compass is from the way we are going. */
+/** The bearing the picture is drawn for, radians. The hand-set turn applies to the compass only: the tracking finds north for itself. */
+const facingNow = () => (tracking.session ? state.pose.yaw : state.pose.yaw + state.settings.offset * RAD);
+
+/** On each fix while moving along the route: how far the heading shown is from the way we are going. */
 function checkHeading() {
   if (!state.pose) return;
   const here = position();
@@ -165,9 +306,9 @@ function checkHeading() {
   const along = routeBearing(state.course.route, here.dist);
   // Teach the heading what the compass's steady error is, from the way we are going.
   fuser.travel((((along / RAD) % 360) + 360) % 360, here.speed, seconds());
-  const facing = state.pose.yaw + state.settings.offset * RAD;
-  const error = angleBetween(along, facing) / RAD;
-  const alone = angleBetween(along, state.compass + state.settings.offset * RAD) / RAD;
+  const error = angleBetween(along, facingNow()) / RAD;
+  // With the camera's tracking on there may be no compass at all to compare with.
+  const alone = state.compass == null ? error : angleBetween(along, state.compass + state.settings.offset * RAD) / RAD;
   state.readings.push({ t: Math.round(performance.now() / 100) / 10, speed: here.speed, error, alone });
   showResults();
 }
@@ -233,7 +374,14 @@ function notice(text) {
   $('notice').hidden = !text;
 }
 
+/** The page's own clock for drawing. While the camera's tracking is on, its pictures set the pace instead. */
 function frame() {
+  if (tracking.session) return;
+  draw();
+  requestAnimationFrame(frame);
+}
+
+function draw() {
   const scale = Math.min(2, window.devicePixelRatio || 1);
   const W = Math.round(canvas.clientWidth * scale);
   const H = Math.round(canvas.clientHeight * scale);
@@ -256,10 +404,10 @@ function frame() {
     const r = here.reading;
     drawScene(ctx, W, H, route, {
       dist: here.dist,
-      yaw: state.pose ? state.pose.yaw + state.settings.offset * RAD : state.gaze + state.look,
+      yaw: state.pose ? facingNow() : state.gaze + state.look,
       pitch: state.pose?.pitch,
       roll: state.pose?.roll ?? 0,
-      fov: state.settings.fov,
+      fov: (tracking.session && tracking.fov) || state.settings.fov,
       unit: scale * 0.95,
       world: !state.camera,
       ghostDist: r ? r.ghostDist : null,
@@ -276,12 +424,13 @@ function frame() {
     });
     const tips = [];
     if (here.offRoute) tips.push('You are off this route: progress is held until you rejoin it.');
-    if (!state.session) tips.push('Stand on the route facing along it. The blue line should lie on the path.');
-    if (!state.pose && !state.demo) tips.push('This device reports no compass, so the view follows the path. Drag to look around.');
+    if (tracking.session && tracking.lost) tips.push('The camera has lost track of where it is. Point it at the ground a few metres ahead.');
+    else if (tracking.session && tracking.aligner.state().quality === 'none') tips.push('Finding north: walk along the route. Until then the line is placed by ' + (state.compass != null ? 'the compass.' : 'the way you were facing when you began.'));
+    else if (!state.session) tips.push('Stand on the route facing along it. The blue line should lie on the path.');
+    if (!state.pose && !state.demo && !tracking.session) tips.push('This device reports no compass, so the view follows the path. Drag to look around.');
     notice(tips.join(' ') || null);
   }
   showStatus(here);
-  requestAnimationFrame(frame);
 }
 
 function showStatus(here) {
@@ -289,14 +438,21 @@ function showStatus(here) {
   if (state.demo) parts.push(`Sample run at ${state.demo.speed}× speed.`);
   else if (state.gpsError) parts.push(state.gpsError + '.');
   else if (state.lastFix) parts.push(`GPS good to ${Math.round(state.lastFix.accuracy)} m.`);
-  if (state.pose) parts.push(`Facing ${Math.round((((state.pose.yaw / RAD + state.settings.offset) % 360) + 360) % 360)}°.`);
+  if (state.pose) parts.push(`Facing ${Math.round((((facingNow() / RAD) % 360) + 360) % 360)}°.`);
   const learned = fuser.at(seconds());
-  if (state.pose && $('correct').checked) parts.push(learned?.corrected ? `Compass found to be ${Math.abs(learned.error).toFixed(0)}° ${learned.error > 0 ? 'right' : 'left'} of the way you move; taken off.` : 'Learning the compass: move along the route for a few seconds.');
+  let north = null;
+  if (tracking.session) {
+    const found = tracking.aligner.state();
+    north = found.quality === 'none' ? 'Camera tracking on; north not found yet.' : `North found from ${Math.round(found.span)} m of movement${found.quality === 'good' ? '' : ': rough so far'}; GPS and tracking agree to ${found.residual.toFixed(1)} m.`;
+    parts.push(north);
+  } else if (state.pose && $('correct').checked) parts.push(learned?.corrected ? `Compass found to be ${Math.abs(learned.error).toFixed(0)}° ${learned.error > 0 ? 'right' : 'left'} of the way you move; taken off.` : 'Learning the compass: move along the route for a few seconds.');
   if (here) parts.push(`${Math.round(here.dist)} m along the route.`);
   const r = here?.reading;
   if (r) parts.push(Math.abs(r.timeGap) < 0.5 ? 'Level with the ghost.' : `${Math.round(Math.abs(r.timeGap))} s ${r.timeGap > 0 ? 'ahead of' : 'behind'} the ghost.`);
   const text = parts.join(' ');
   if ($('status').textContent !== text) $('status').textContent = text;
+  // Over the camera picture only the stage shows, and there is little room: just how the tracking is doing.
+  if (north && $('trackStatus').textContent !== north) $('trackStatus').textContent = north;
 }
 
 // ---------------------------------------------------------------- wiring --
@@ -335,6 +491,7 @@ async function toggleGhost() {
     }
   }
   $('go').textContent = state.session ? 'Stop, and line up again' : 'Start the ghost';
+  $('trackGo').textContent = state.session ? 'Stop' : 'Start the ghost';
 }
 
 async function importGpx(input) {
@@ -375,6 +532,10 @@ async function init() {
   $('recentre').hidden = !state.demo;
 
   $('go').addEventListener('click', toggleGhost);
+  $('trackGo').addEventListener('click', toggleGhost);
+  $('track').addEventListener('click', startTracking);
+  $('trackLeave').addEventListener('click', () => tracking.session?.end());
+  offerTracking();
   $('recentre').addEventListener('click', () => (state.look = 0));
   $('run').addEventListener('change', setCourse);
   $('ghostKind').addEventListener('change', setCourse);
@@ -415,5 +576,6 @@ async function init() {
 
 // For tests and for poking at from the console.
 window.sportshud = state;
+window.sportshudTracking = tracking;
 
 init();

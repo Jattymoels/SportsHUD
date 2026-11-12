@@ -10,7 +10,7 @@
   <header class="top">
     <a class="home" href="../../">SportsHUD</a>
     <h1>Golf HUD</h1>
-    <p class="lede">Silent, glanceable course guidance: how far to the green, where the chosen club lands the ball in today's wind, and the distance to whatever you look at. On the 18 holes of the Grange that OpenStreetMap has mapped, or a made-up hole. At the desk the sliders say where you are; on the course the phone can.
+    <p class="lede">Silent, glanceable course guidance: how far to the green, where the chosen club lands the ball in today's wind, and the distance to whatever you look at. On the Grange's East Course, as OpenStreetMap has it mapped, or a made-up hole. At the desk the sliders say where you are; on the course the phone can.
   </header>
 
   <main>
@@ -32,7 +32,7 @@
         <div class="bar">
           <label>Course
             <select id="course">
-              <option value="grange">The Grange: the 18 mapped holes</option>
+              <option value="grange">The Grange, East Course</option>
               <option value="made-up">A made-up hole</option>
             </select>
           </label>
@@ -124,7 +124,7 @@
         <h2>What is real here</h2>
         <ul>
           <li>The distances are worked out the way they will be on a course: from a position and a mapped outline of the green and hazards. Front and back of the green are along the line from where you stand through its middle.</li>
-          <li>The Grange layout comes from OpenStreetMap, which has a line of play, par and stroke index for 18 of the club's 36 holes, with their greens, pins, tees, fairways and bunkers. They are on the east side of the property. Nothing has yet been checked against the ground: the pin is wherever the mapper put it, not today's hole.</li>
+          <li>The Grange layout comes from OpenStreetMap, which has a line of play, par and stroke index for the 18 holes of the East Course, with their greens, pins, tees, fairways and bunkers. The West Course has its greens and bunkers drawn but no lines of play, so it cannot be used yet. Nothing has yet been checked against the ground: the pin is wherever the mapper put it, not today's hole.</li>
           <li>The made-up hole is laid out on a grid, so each number can be checked by hand. "Put the made-up hole where I am standing" lays it on the ground from your position, playing the way you face, so the page can be tried anywhere: walk towards the green and watch the numbers fall.</li>
           <li>The wind's effect is a rule of thumb: a headwind costs about 1% of carry per mph and a tailwind gives about half that, and a crosswind moves the ball sideways in proportion to carry. It moves the zone the right way; the amounts are placeholders until there are real shots to learn from.</li>
           <li>The club distances are the ones entered for this bag, the middle of each range. Inside the shortest club's distance the zone is drawn for a part shot of the length needed.</li>

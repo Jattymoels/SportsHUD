@@ -167,7 +167,7 @@ function render() {
 function numbers(w) {
   const m = (v) => `${v.toFixed(1)} m`;
   const rows = [
-    ['Hole', `${state.course.name}, hole ${w.hole.number}${w.hole.par ? `: par ${w.hole.par}` : ''}${w.hole.index ? `, stroke index ${w.hole.index}` : ''}, ${Math.round(w.length)} m along its line of play`],
+    ['Hole', `${state.course.title ?? state.course.name}, hole ${w.hole.number}${w.hole.par ? `: par ${w.hole.par}` : ''}${w.hole.index ? `, stroke index ${w.hole.index}` : ''}, ${Math.round(w.length)} m along its line of play`],
     ['Green, along the line from you through its middle', `front ${m(w.green.front)} · centre ${m(w.green.centre)} · back ${m(w.green.back)}${w.green.onGreen ? ' (you are on it)' : ''}`],
     [w.pinSet ? 'Pin, where you stood at it today' : 'Pin, as mapped', w.pin == null ? 'not mapped' : m(w.pin)],
     ['Aiming at', `${w.target.name}, ${m(w.toTarget)} away on ${w.aim.toFixed(1)}°${state.nudge ? ` (moved ${Math.abs(state.nudge)}° ${state.nudge > 0 ? 'right' : 'left'} by hand)` : ''}`],

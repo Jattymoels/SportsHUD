@@ -126,3 +126,62 @@ test('toGpx writes a run that parseGpx reads back', () => {
     near(f.lon, fixes[i].lon, 1e-7);
   });
 });
+
+// ------------------------------- a recording, with a pace ghost standing in --
+
+// A ghost that ran 900 m of street at 3.3 m/s, and the two ways to race it.
+const street = path([[0, 0], [900, 0]]);
+const past = ghostFromFixes(steady(street, 3.3), []);
+const plain = () => createRunSession({ ghost: { kind: 'track', route: past.route, profile: past.ghost }, clock: 'elapsed' });
+const guarded = () => createRunSession({ ghost: { kind: 'track', route: past.route, profile: past.ghost, fallback: 1000 / 3.3 }, clock: 'elapsed' });
+/** Feed fixes and collect the reading after each. */
+const readings = (session, fixes) => fixes.map((fix) => (session.update(fix), session.at(fix.t)));
+
+test('on the ghost\'s own route, racing it with a stand-in gives the same race', () => {
+  const fixes = steady(street, 3);
+  const a = readings(plain(), fixes);
+  const b = readings(guarded(), fixes);
+  // 3 m/s against 3.3 m/s loses about 0.091 s every second, either way.
+  near(a[200].timeGap, -0.091 * 200, 1.5);
+  near(b[200].timeGap, a[200].timeGap, 1.5, 'half-way');
+  assert.equal(b[200].racing, 'recording');
+  assert.equal(b[200].offRoute, false);
+  near(b[200].routeDist, 600, 4);
+  // No "off route" at the start, in the seconds before the recording takes over.
+  assert.ok(b.slice(0, 20).every((r) => !r.offRoute));
+  // At the end the race is over and the gap stays as it stood.
+  assert.equal(b.at(-1).finished, true);
+  near(b.at(-1).timeGap, a.at(-1).timeGap, 2, 'at the finish');
+  assert.equal(b.at(-1).racing, 'recording');
+});
+
+test('taking another street for a while: without a stand-in the gap runs away, with one it carries on', () => {
+  // The next street over, 80 m north, for 300 m, at the ghost's own speed.
+  const roundabout = steady(path([[0, 0], [200, 0], [200, 80], [500, 80], [500, 0], [900, 0]]), 3.3);
+  const a = readings(plain(), roundabout);
+  const b = readings(guarded(), roundabout);
+  // By 130 s the runner has been off the route for a minute and a half.
+  assert.ok(a[130].timeGap < -30, `held progress: ${a[130].timeGap.toFixed(0)} s`);
+  assert.equal(a[130].offRoute, true);
+  near(b[130].timeGap, 0, 2.5, 'with the stand-in');
+  assert.equal(b[130].racing, 'pace');
+  assert.equal(b[130].offRoute, true, 'and the display is told the ghost is a stand-in for now');
+  assert.equal(b[130].routeDist, null);
+  // Back on the street (at 200 s) the recording takes over again within seconds, and nothing jumped.
+  assert.equal(b[212].racing, 'recording');
+  assert.equal(b[212].offRoute, false);
+  near(b[212].timeGap, 0, 3);
+  const biggest = Math.max(...b.slice(1).map((r, i) => Math.abs(r.timeGap - b[i].timeGap)));
+  assert.ok(biggest < 1, `biggest change in one second ${biggest.toFixed(2)} s`);
+  assert.equal(b.at(-1).finished, true);
+});
+
+test('starting part-way along the ghost\'s route races it from there', () => {
+  // Joining 400 m in. The ghost passed that spot two minutes into its run.
+  const fixes = steady(path([[400, -60], [400, 0], [900, 0]]), 3.3);
+  const a = readings(plain(), fixes);
+  const b = readings(guarded(), fixes);
+  assert.ok(Math.abs(a[60].timeGap) > 60, `without a stand-in the gap is nonsense: ${a[60].timeGap.toFixed(0)} s`);
+  near(b[60].timeGap, 0, 2.5, 'with one, level from where the runner joined');
+  assert.equal(b[60].racing, 'recording');
+});

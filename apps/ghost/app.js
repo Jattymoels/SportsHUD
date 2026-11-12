@@ -5,7 +5,8 @@
 // Everything is driven by five keys, as on the glasses: the four arrows and
 // Enter. On a phone, a swipe is an arrow and a tap is Enter.
 
-import { toGpx, haversine, ghostFromFixes, createRunSession } from '../../engine/index.js';
+import { toGpx, haversine, ghostFromFixes, createRunSession, groupFixes, guideFromRuns, nextCue } from '../../engine/index.js';
+import { describe, metres, wait } from '../route/screen.js';
 import { SIZE, drawRun, drawList, drawMenu, drawCard, clock, pace, km } from './hud.js';
 import { loadRuns, saveRuns, loadSettings, saveSettings, storedRun, fixesOf, runFromGpx, loadSample } from './store.js';
 import { liveSource, demoSource } from './sources.js';
@@ -96,9 +97,34 @@ function chooseGhost(row) {
     const fixes = fixesOf(run);
     const { route, ghost } = ghostFromFixes(fixes, state.settings.clock === 'moving' ? run.pauses : []);
     const when = run.demo ? 'the sample run' : `your run of ${dateLabel(run.startedAt)}`;
-    state.ghost = { kind: 'track', route, profile: ghost, start: fixes[0], label: `ghost ${run.demo ? 'sample run' : dateLabel(run.startedAt)}`, title: `Racing ${when}` };
+    // Off its route (another street, a start part-way along) a ghost at the
+    // run's own average pace stands in, so the gap never runs away.
+    const fallback = run.secondsPerKm ?? state.settings.secondsPerKm;
+    state.ghost = {
+      kind: 'track', route, profile: ghost, fallback, start: fixes[0],
+      label: `ghost ${run.demo ? 'sample run' : dateLabel(run.startedAt)}`,
+      standInLabel: `ghost ${pace(fallback)} /km`,
+      title: `Racing ${when}`,
+      guide: routeGuide(run),
+    };
   }
   state.screen = 'ready';
+}
+
+/**
+ * What the saved runs say about this run's route: its turns, and where runs
+ * of it have waited. The chosen run draws the route, as it does for the
+ * ghost; other saved runs of the same route, the same way, add to it.
+ */
+function routeGuide(run) {
+  try {
+    const all = state.runs.map(fixesOf);
+    const mine = state.runs.indexOf(run);
+    const same = groupFixes(all).find((members) => members.includes(mine)) ?? [mine];
+    return guideFromRuns([all[mine], ...same.filter((i) => i !== mine).map((i) => all[i])]);
+  } catch {
+    return null; // the race goes ahead without cues
+  }
 }
 
 // ---------------------------------------------------------------- the run --
@@ -243,6 +269,12 @@ function draw() {
       const away = haversine(state.lastFix.lat, state.lastFix.lon, state.ghost.start.lat, state.ghost.start.lon);
       lines.push(away > 60 ? { text: `That run started ${away < 1000 ? `${Math.round(away)} m` : `${km(away)} km`} from here`, tone: 'warn', size: 26 } : { text: 'You are at its start', tone: 'good', size: 26 });
     }
+    const guide = state.ghost.guide;
+    if (guide) {
+      const waits = guide.pausePoints.length;
+      const waiting = waits ? `${waits} likely wait${waits === 1 ? '' : 's'}, about ${wait(guide.usualWait)}` : 'no waits on record';
+      lines.push({ text: `${km(guide.length)} km · ${waiting}`, tone: 'dim', size: 24 });
+    }
     lines.push({ text: state.settings.clock === 'moving' ? 'The clock stops when you stop' : 'The clock never stops', tone: 'dim', size: 24 });
     drawCard(ctx, { title: 'READY', lines, hint: 'tap or Enter as you set off    ◀ back' });
   } else if (state.screen === 'run' || state.screen === 'menu') {
@@ -256,6 +288,9 @@ function draw() {
       s.distGap += (r.distGap - s.distGap) * 0.12;
       const now = performance.now();
       const notice = r.fixAge > 5 ? 'GPS?' : r.offRoute ? 'OFF ROUTE' : r.finished ? 'FINISHED' : r.accuracy > 30 ? 'GPS WEAK' : null;
+      // The next turn or likely wait, while on the ghost's route and within 200 m of it.
+      const next = state.ghost.guide && r.routeDist != null && !r.finished ? nextCue(state.ghost.guide, r.routeDist).now : null;
+      const cue = next && next.in <= 200 && next.kind !== 'finish' ? { title: describe(next).title, distance: metres(next.in), in: next.in, side: next.kind === 'turn' ? next.side : null } : null;
       drawRun(ctx, {
         time: r.time,
         distance: r.distance,
@@ -263,9 +298,10 @@ function draw() {
         timeGap: s.timeGap,
         distGap: s.distGap,
         trend: r.paused ? 0 : trend(),
-        ghostLabel: state.ghost.label,
+        ghostLabel: r.racing === 'pace' && state.ghost.standInLabel ? state.ghost.standInLabel : state.ghost.label,
         paused: r.paused,
         notice,
+        cue,
         banner: state.banner && now < state.banner.until ? state.banner.text : null,
         float: now / 1000,
       });
@@ -326,7 +362,7 @@ function exportLatest() {
 
 async function init() {
   const params = new URLSearchParams(location.search);
-  const sample = ['run', 'ride', 'walk'].includes(params.get('demo')) ? params.get('demo') : null;
+  const sample = ['run', 'ride', 'walk', 'shared'].includes(params.get('demo')) ? params.get('demo') : null;
   if (sample) {
     try {
       const { mine, theirs } = await loadSample(sample);

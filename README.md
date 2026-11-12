@@ -56,7 +56,9 @@ Open `apps/ghost/` on the phone, outdoors, and allow location.
 
 Swipes are the arrow keys and a tap is Enter, which is all the glasses have. Keep the page open and the screen on: a phone that locks stops reporting where it is. Runs are kept in the browser's storage on that device, the latest eight, and nowhere else. "Download my latest run" saves one as GPX.
 
-`apps/ghost/?demo=run&speed=10` plays a sample run without GPS.
+Racing a saved run does not need you to stay on its route. Wherever you are off it (another street for a few blocks, a start part-way along, a different finish) a ghost holding that run's average pace stands in, the screen says OFF ROUTE and names the stand-in, and the gap carries on when the saved run's ghost takes over again. While you are on its route, the next turn or likely wait within 200 m is named under the clock and marked on the road. Those come from the route guide, built from that run and any other saved runs of the same route.
+
+`apps/ghost/?demo=run&speed=10` plays a sample run without GPS. `apps/ghost/?demo=shared&speed=10` plays one that shares only part of the ghost's route.
 
 ## The anchoring probe, on a phone
 
@@ -144,7 +146,7 @@ The two kinds of ghost combine. You run wherever you like against a ghost holdin
 
 **In the harness,** choose "Run sharing part of the route (synthetic)", or set "Ghost" to "Live segments" with two files of your own. The map shows the ghost's route under yours, and the chart is shaded where the recording was being raced.
 
-Not built yet: live segments in Ghost run on the phone. It needs a way to pick which saved runs to carry along, and it has not been tried outdoors.
+**On the phone,** Ghost run races a saved run this way, with that run's average pace as the set pace. Not built yet: carrying several saved runs along on any route, which needs a way to pick them. None of it has been tried outdoors.
 
 ## The route guide
 
@@ -161,7 +163,7 @@ Past runs of a route say a good deal about it without any map. `buildGuide` in `
 
 `apps/route/` shows the result two ways: the pre-start screen the glasses would show (the route's shape, distance, climb, usual time, expected waiting) and the cue screen on the way. Below those are the height profile and the full list. Load any number of your own GPX files at once; they are sorted into routes for you to pick from. The same turns, waits and climbs appear as signs in `apps/preview/`.
 
-Not built yet: water and toilets, which need map data (B6 in the spec); cues during a live run on the phone; and counting a wait at the same crossing by runs in the other direction.
+Ghost run shows the turns and likely waits as cues during a run. Not built yet: water and toilets, which need map data (B6 in the spec); climbs on the phone, since runs recorded there carry no elevation; and counting a wait at the same crossing by runs in the other direction.
 
 ## Deployment
 

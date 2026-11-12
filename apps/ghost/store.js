@@ -77,11 +77,15 @@ export function runFromGpx(text, demo = false) {
   });
 }
 
-/** A sample pair from the fixtures: `mine` to replay, `theirs` as the ghost. */
+/**
+ * A sample pair from the fixtures: `mine` to replay, `theirs` as the ghost.
+ * "shared" is a run that only shares part of the ghost's route.
+ */
 export async function loadSample(name) {
+  const files = name === 'shared' ? ['run-shared.gpx', 'run-a.gpx'] : [`${name}-b.gpx`, `${name}-a.gpx`];
   const [mine, theirs] = await Promise.all(
-    ['b', 'a'].map(async (who) => {
-      const response = await fetch(new URL(`${name}-${who}.gpx`, FIXTURES));
+    files.map(async (file) => {
+      const response = await fetch(new URL(file, FIXTURES));
       if (!response.ok) throw new Error(`no sample called "${name}"`);
       return runFromGpx(await response.text(), true);
     }),

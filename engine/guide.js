@@ -66,7 +66,11 @@ function follows(route, fixes, options) {
  *   is the one to draw the route's line.
  */
 export function groupRuns(recordings, options) {
-  const all = recordings.map((recording) => toFixes(recording));
+  return groupFixes(recordings.map((recording) => toFixes(recording)), options);
+}
+
+/** groupRuns for runs already in hand as fixes, as an app keeps the runs it recorded. */
+export function groupFixes(all, options) {
   const groups = [];
   all.forEach((fixes, i) => {
     const home = groups.find((g) => follows(g.route, fixes, options));
@@ -423,9 +427,17 @@ function gatherWaits(route, perRun, options) {
  *   each `{kind, dist, ...}` with kind 'turn' | 'wait' | 'climb' | 'marker' | 'finish'.
  */
 export function buildGuide(recordings, options) {
+  return guideFromRuns(recordings.map((recording) => toFixes(recording)), options);
+}
+
+/**
+ * buildGuide for runs already in hand as fixes, as an app keeps the runs it
+ * recorded. The first run draws the route.
+ * @param {Array<Array<{t:number, lat:number, lon:number, ele?:number}>>} all
+ */
+export function guideFromRuns(all, options) {
   const o = { ...GUIDE_DEFAULTS, ...options };
-  if (!recordings.length) throw new Error('A route guide needs at least one recording of the route');
-  const all = recordings.map((recording) => toFixes(recording));
+  if (!all.length) throw new Error('A route guide needs at least one recording of the route');
   const route = buildRoute(all[0], options);
   const runs = all.filter((fixes, i) => i === 0 || follows(route, fixes, options));
 

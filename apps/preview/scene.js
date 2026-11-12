@@ -5,7 +5,7 @@
 // ground, the path, posts beside it. Over that goes what the glasses add,
 // drawn as light, and only inside the part of your view the display covers.
 
-import { pointAtDistance } from '../../engine/index.js';
+import { smoothPoint } from '../../engine/index.js';
 import { ghostGlyph, drawRun, clock, pace, INK, AHEAD, BEHIND, FONT } from '../ghost/hud.js';
 import { describe, metres } from '../route/screen.js';
 
@@ -20,20 +20,8 @@ const square = document.createElement('canvas');
 square.width = 600;
 square.height = 600;
 
-/**
- * The point `d` metres along the route, with GPS wobble averaged out over
- * the 12 m either side, so the path and the view along it are steady.
- */
-export function steady(route, d) {
-  let x = 0;
-  let y = 0;
-  for (const shift of [-12, -6, 0, 6, 12]) {
-    const p = pointAtDistance(route, d + shift);
-    x += p.x / 5;
-    y += p.y / 5;
-  }
-  return { x, y };
-}
+/** The point `d` metres along the route, with GPS wobble averaged out: the engine's, under the name used here. */
+export const steady = smoothPoint;
 
 /** Sample distances ahead of the runner: close together near, spreading out far. */
 function ahead(from, to, reach) {
@@ -71,6 +59,7 @@ function ahead(from, to, reach) {
  *   picture is behind the canvas instead
  * @param {boolean} [v.readouts] show the gap and pace; false while lining up
  * @param {number} [v.unit] canvas pixels per unit of text and line size
+ * @param {number} [v.eye] metres this eye sits to the right of the middle of the head, when a picture is drawn for each eye
  */
 export function drawScene(ctx, W, H, route, v) {
   const focal = W / 2 / Math.tan(((v.fov ?? VIEW_FOV) / 2) * RAD);
@@ -88,7 +77,7 @@ export function drawScene(ctx, W, H, route, v) {
     const dx = x - here.x;
     const dy = y - here.y;
     const flat = dx * sin + dy * cos;
-    const right = dx * cos - dy * sin;
+    const right = dx * cos - dy * sin - (v.eye ?? 0);
     const up = z - EYE;
     const forward = flat * cp + up * sp;
     if (forward < 0.8) return null;

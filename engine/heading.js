@@ -32,17 +32,78 @@ const wrap = (bearing) => ((bearing % 360) + 360) % 360;
 const median = (values) => [...values].sort((a, b) => a - b)[values.length >> 1];
 
 /**
+ * Learns a steady difference between two bearings from a stream of noisy
+ * comparisons: the middle of the first few for a sound start, then a slow
+ * lean towards each new one, leaving out any that are far from what has
+ * been learned, which are the wearer looking aside.
+ */
+function createLearner(o) {
+  let error = 0;
+  let rate = 0; // degrees a second the difference is growing by, where that is being learned too
+  let seenAt = null; // when the difference was last brought up to date
+  let known = false;
+  let first = null; // the first comparison, which the early ones are measured from so that none wraps round
+  let early = [];
+  /** The difference at time `t`, carried on from when it was last learned by the rate it was growing at. */
+  const at = (t) => (o.learnDrift && seenAt != null && t != null ? error + rate * Math.min(o.carry, Math.max(0, t - seenAt)) : error);
+  return {
+    at,
+    get known() {
+      return known;
+    },
+    /** One comparison, at time `t`, `dt` seconds after the last. Returns true when this one gives the first estimate. */
+    see(seen, dt, t) {
+      if (!known) {
+        first ??= seen;
+        early.push(turn(first, seen));
+        if (early.length < o.startAfter) return false;
+        error = first + median(early);
+        known = true;
+        early = [];
+        seenAt = t;
+        return true;
+      }
+      const expected = at(t);
+      const out = turn(expected, seen);
+      error = expected;
+      seenAt = t;
+      if (Math.abs(out) > o.glance) return false;
+      if (o.learnDrift) {
+        // Following a difference that grows steadily: lean on each comparison
+        // twice as hard, and let what is left over say how fast it is growing.
+        error += out * (1 - Math.exp((-2 * dt) / o.errorOver));
+        rate = Math.max(-o.fastest, Math.min(o.fastest, rate + (out * dt) / o.errorOver ** 2));
+      } else error += out * (1 - Math.exp(-dt / o.errorOver));
+      return false;
+    },
+    /** Told the difference outright, at time `t`. */
+    set(value, t) {
+      error = value;
+      known = true;
+      early = [];
+      seenAt = t ?? seenAt;
+    },
+  };
+}
+
+/** Whether a reading of travel is fit to learn from, and how long since the last. */
+function travelStep(o, before, bearing, speed, t) {
+  if (!(speed >= o.minSpeed)) return null;
+  // Mid-turn the body and the head are not yet going the same way.
+  if (before && t > before.t && Math.abs(turn(before.bearing, bearing)) / (t - before.t) > o.steadyTurn) return null;
+  return before ? Math.min(5, Math.max(0, t - before.t)) : 1;
+}
+
+/**
  * @param {Partial<typeof HEADING_DEFAULTS>} [options]
  * @returns an object fed with readings as they arrive, each with the time
  *   `t` in seconds, and asked for the heading at any moment.
  */
 export function createHeadingFuser(options) {
   const o = { ...HEADING_DEFAULTS, ...options };
+  const learner = createLearner(o); // the compass's steady error: compass minus true
   let yaw = null; // the heading being kept
   let yawAt = null;
-  let error = 0; // the compass's steady error, as learned so far: compass minus true
-  let known = false; // whether `error` has been estimated at all
-  let early = []; // the first few comparisons, for a sound first estimate
   let rate = 0; // latest turn rate from the gyroscope, degrees a second
   let gyroAt = null;
   let compassSlow = null; // the compass smoothed over a second, for comparing with travel
@@ -65,7 +126,7 @@ export function createHeadingFuser(options) {
       const dt = compassAt == null ? 0 : Math.max(0, t - compassAt);
       compassSlow = compassSlow == null ? bearing : wrap(compassSlow + turn(compassSlow, bearing) * (1 - Math.exp(-dt / 1)));
       compassAt = t;
-      const corrected = wrap(bearing - error);
+      const corrected = wrap(bearing - learner.at());
       if (yaw == null) {
         yaw = corrected;
         yawAt = t;
@@ -84,23 +145,10 @@ export function createHeadingFuser(options) {
     travel(bearing, speed, t) {
       const before = travelBefore;
       travelBefore = { bearing, t };
-      if (compassSlow == null || !(speed >= o.minSpeed)) return;
-      // Mid-turn the body and the head are not yet going the same way.
-      if (before && t > before.t && Math.abs(turn(before.bearing, bearing)) / (t - before.t) > o.steadyTurn) return;
-      const seen = turn(bearing, compassSlow); // what the compass's error looks like right now
-      if (!known) {
-        early.push(seen);
-        if (early.length < o.startAfter) return;
-        error = median(early);
-        known = true;
-        early = [];
-        if (yaw != null) yaw = wrap(compassSlow - error);
-        return;
-      }
-      // A head turned well aside is a glance, not news about the compass.
-      if (Math.abs(turn(error, seen)) > o.glance) return;
-      const dt = before ? Math.min(5, Math.max(0, t - before.t)) : 1;
-      error += turn(error, seen) * (1 - Math.exp(-dt / o.errorOver));
+      const dt = travelStep(o, before, bearing, speed, t);
+      if (compassSlow == null || dt == null) return;
+      // What the compass's error looks like right now. The first estimate moves the heading at once.
+      if (learner.see(turn(bearing, compassSlow), dt, t) && yaw != null) yaw = wrap(compassSlow - learner.at());
     },
 
     /**
@@ -113,7 +161,80 @@ export function createHeadingFuser(options) {
     at(t) {
       if (yaw == null) return null;
       const since = gyroAt != null && t - gyroAt < 0.5 && yawAt != null ? Math.max(0, t - yawAt) : 0;
-      return { yaw: wrap(yaw + rate * since), error, corrected: known };
+      return { yaw: wrap(yaw + rate * since), error: turn(0, learner.at()), corrected: learner.known };
+    },
+  };
+}
+
+export const ANCHOR_DEFAULTS = {
+  ...HEADING_DEFAULTS,
+  errorOver: 60, // seconds over which the difference from north is learned
+  learnDrift: true, // also learn how fast that difference is growing: a gyroscope's wander is steady over minutes
+  fastest: 0.2, // degrees a second: no wander faster than this is believed
+  carry: 120, // seconds the difference is carried on by its rate when nothing new is learned, as at a long wait
+};
+
+/**
+ * The heading with no compass at all.
+ *
+ * Phones and most glasses already blend their gyroscope and the pull of
+ * gravity into one smooth, quick orientation. Left to itself that has two
+ * faults: its idea of which way is north starts off arbitrary, and wanders
+ * by a degree or so a minute. A compass fixes both and brings faults of its
+ * own: it is thrown by cars, rails, bridges and the electronics beside it.
+ *
+ * A runner on a known route has a better reference. Over a minute, the
+ * middle of where the head points is the way the route goes. So take the
+ * orientation as it comes, moment to moment, and learn only the slow
+ * difference between it and north, and how fast that difference is
+ * growing, from the direction of travel.
+ *
+ * @param {Partial<typeof ANCHOR_DEFAULTS>} [options]
+ */
+export function createTravelAnchor(options) {
+  const o = { ...ANCHOR_DEFAULTS, ...options };
+  const learner = createLearner(o); // the orientation's yaw minus the true bearing
+  let latest = null;
+  let slow = null; // the yaw smoothed over a second, for comparing with travel
+  let slowAt = null;
+  let travelBefore = null;
+
+  return {
+    /** The device's own yaw, in degrees clockwise, measured from wherever it measures from. Call on every reading. */
+    orientation(yaw, t) {
+      const dt = slowAt == null ? 0 : Math.max(0, t - slowAt);
+      slow = slow == null ? yaw : wrap(slow + turn(slow, yaw) * (1 - Math.exp(-dt / 1)));
+      slowAt = t;
+      latest = yaw;
+    },
+
+    /** Told outright: the wearer is facing this bearing now, at time `t`. For lining up before setting off. */
+    set(bearing, t) {
+      if (latest == null) return;
+      learner.set(turn(bearing, latest), t ?? slowAt);
+      slow = latest;
+    },
+
+    /** The direction of travel, as for the fuser above. */
+    travel(bearing, speed, t) {
+      const before = travelBefore;
+      travelBefore = { bearing, t };
+      const dt = travelStep(o, before, bearing, speed, t);
+      if (slow == null || dt == null) return;
+      learner.see(turn(bearing, slow), dt, t);
+    },
+
+    /**
+     * @param {number} [t] the time now, if later than the last reading
+     * @returns {{yaw:number, offset:number, corrected:boolean}|null} yaw: the
+     *   bearing faced. offset: what has been taken off the device's own yaw
+     *   to get it. corrected: whether that has been learned or told yet;
+     *   until then yaw is the device's own.
+     */
+    at(t = slowAt) {
+      if (latest == null) return null;
+      const offset = learner.at(t);
+      return { yaw: wrap(latest - offset), offset: turn(0, offset), corrected: learner.known };
     },
   };
 }

@@ -60,13 +60,16 @@ The ghost does not have to be a recording of the route being run:
 
 **Ghosts between friends.** A run packs small enough to ride in a link. The runner chooses to send it; whoever opens it has a ghost on their own device, which takes over on any stretch of their own runs that shares its route. No server holds anything.
 
-Three more behaviours follow. The targets are proposals, like the others.
+**The ghost in the view.** The aim of the product is the ghost standing on the road in the runner's view, through glasses. `docs/design/ghost-glasses.md` is the design.
+
+Four more behaviours follow. The targets are proposals, like the others.
 
 | ID | Behaviour | How we test it | Proposed pass target | Tested on |
 | --- | --- | --- | --- | --- |
 | B11 | Live gap to a ghost holding a set pace, on any route | Replay a recording against a set pace; compare the live gap with the gap computed afterwards, and the distance measured with the watch's own figure | Within 3 seconds of the computed gap; distance within 1% of the watch's | Desk, then phone |
 | B12 | Live segments: a recorded ghost takes over where routes overlap | Replay a run that shares part of its route with a recorded ghost | Switches within 5 seconds of joining and 7 seconds of leaving the shared stretch; no jump in the gap at either switch | Desk, then phone |
 | B13 | A ghost sent as a link, with no server or account | Pack a recording into a link, unpack it, and race the same run against both ghosts | Gap within 1 second of the gap against the original for 19 readings in 20; an hour's run in under 2,000 characters | Replay harness |
+| B14 | The ghost placed on the road in a head-worn display, with no compass | Replay a route against made-up head sensors that wander; then wear it | Heading within 3 degrees for 19 readings in 20; the whole ghost on a 30-degree display for 90% of the route when it is 10 to 40 m ahead | Replay harness, then a phone on the head, then glasses |
 
 ## Constraints
 

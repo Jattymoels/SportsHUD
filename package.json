@@ -8,6 +8,7 @@
     "test": "node --test",
     "start": "node tools/serve.mjs",
     "b1": "node tools/b1.mjs",
+    "view": "node tools/view.mjs",
     "fixtures": "node fixtures/generate.mjs"
   },
   "engines": {

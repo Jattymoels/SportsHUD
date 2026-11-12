@@ -2,7 +2,7 @@
 // ghost, or a route, in another. They live in the browser's own storage and
 // go nowhere else.
 
-import { parseGpx, toFixes, findPauses, fillGaps, measureDistance, movingTime } from '../../engine/index.js';
+import { parseGpx, toFixes, findPauses, fillGaps, measureDistance, movingTime, unpackRun } from '../../engine/index.js';
 
 const RUNS_KEY = 'sportshud.runs.v1';
 const SETTINGS_KEY = 'sportshud.settings.v1';
@@ -21,15 +21,21 @@ function load(key, fallback) {
 /** Saved runs, newest first. */
 export const loadRuns = () => load(RUNS_KEY, []);
 
-/** Save, dropping the oldest runs if the browser's storage is full. Sample runs are never saved. */
+/**
+ * Save, dropping the oldest runs if the browser's storage is full. Sample
+ * runs are never saved. Runs sent by friends are counted apart from the
+ * device's own, half as many, so that neither crowds the other out.
+ */
 export function saveRuns(runs) {
-  const mine = runs.filter((r) => !r.demo);
-  for (let keep = Math.min(mine.length, KEEP_RUNS); keep >= 0; keep--) {
+  const real = runs.filter((r) => !r.demo);
+  for (let keep = KEEP_RUNS; keep >= 0; keep--) {
+    const own = real.filter((r) => r.from == null).slice(0, keep);
+    const sent = real.filter((r) => r.from != null).slice(0, Math.ceil(keep / 2));
     try {
-      localStorage.setItem(RUNS_KEY, JSON.stringify(mine.slice(0, keep)));
+      localStorage.setItem(RUNS_KEY, JSON.stringify(real.filter((r) => own.includes(r) || sent.includes(r))));
       return;
     } catch {
-      // Too big: try again with one fewer.
+      // Too big: try again with fewer.
     }
   }
 }
@@ -74,8 +80,9 @@ export function saveSettings(app, settings) {
 }
 
 /** A run in the shape it is stored in: fixes as [t, lat, lon] to keep it small. */
-export function storedRun({ startedAt, distance, time, fixes, pauses, demo = false }) {
+export function storedRun({ startedAt, distance, time, fixes, pauses, demo = false, from = null }) {
   return {
+    ...(from == null ? {} : { from }), // someone else's run, sent as a link, and the name they gave
     id: String(startedAt),
     startedAt,
     distance: Math.round(distance),
@@ -104,6 +111,13 @@ export function runFromGpx(text, demo = false) {
     pauses,
     demo,
   });
+}
+
+/** A run sent as a link, as a stored run. Throws, with a reason fit to show, if the text is not one. */
+export function runFromLink(text) {
+  const { startedAt, fixes, pauses, from } = unpackRun(text);
+  const profile = measureDistance(fixes);
+  return storedRun({ startedAt, distance: profile.dist[profile.dist.length - 1], time: movingTime(pauses, fixes[fixes.length - 1].t), fixes, pauses, from });
 }
 
 /**

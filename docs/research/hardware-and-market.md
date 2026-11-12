@@ -7,7 +7,7 @@ Checked 2026-11-12. Prices, availability and capabilities come mostly from news 
 - **No glasses do everything.** The ones light enough to run in show numbers fixed in your view and cannot place anything in the world. The ones that can place a ghost on the road are heavy, wired or both, cost four figures, and are not sold in Australia.
 - **So the product needs two faces from one engine.** A heads-up face (the gap, a cue, a distance) for the glasses people can wear for sport now, and an anchored face (the ghost on the road) for the glasses that are coming. The engine already feeds both.
 - **The cheapest way to see the anchored ghost for real is an Android phone**, through the browser's own augmented-reality mode. The next step up is a pair of Android XR glasses, which run the same web technology.
-- **The first kit worth buying is a sport heads-up display**, because it is the only kind a runner can actually wear, and one of them has an app store that takes submissions today.
+- **The first glasses worth buying are the Meta Ray-Ban Display**, imported: what is built runs on them unchanged, on the glasses, with the phone in a pocket. A sport heads-up display comes next, to find out whether a runner can actually wear this.
 
 ## What each kind of hardware can and cannot do
 
@@ -22,11 +22,19 @@ Checked 2026-11-12. Prices, availability and capabilities come mostly from news 
 | Price (US) | $400 to $450 | $300 to $800 | $1,100 to $2,200 | Owned already |
 | Sold in Australia | Not confirmed; ships from US, UK and EU stores | Meta: no. G2: sold in New Zealand. Others: import | No | Yes |
 
+### Two things worth being exact about on the Meta pair
+
+Checked again on 2026-11-12, against Meta's developer documentation as search results summarise it, and reviews.
+
+**Does the phone have to be open? No, but it has to be there.** A web app runs on the glasses themselves, with no companion app of ours. The glasses have no location sensor and no connection of their own: position and internet come from the paired phone over Bluetooth, through the Meta AI app. For Meta's own walking directions, Meta's help page asks for that app's location permission to be "Always" and "Precise", which is the setting that lets a locked phone in a pocket keep supplying position. Reviews describe using navigation without taking the phone out. So the phone is carried, not held or looked at. What nobody found confirms is that a third-party web app keeps getting positions, second by second, for an hour with the phone locked. It is likely, and it is the first thing to test on a real pair.
+
+**Is it augmented reality? No. It is a heads-up display that can be made to behave a little like it.** One small screen in the right lens, about 20° of view. Nothing tracks where the glasses are in the world, and nothing lets an app pin a picture to the road. Meta draws the same line: its true augmented-reality glasses, Orion, are a prototype that is not for sale, and nothing announced at Connect 2026 changes that. What a web app does get is which way the glasses face and how they are tilted. With that and position, a ghost or a marker can be drawn in the right direction and at the right size for its distance, and slide across the display as the head turns. It is anchored by direction, not locked to the ground: it is as steady as the compass, and it is only visible inside that 20°. For a ghost 10 m or more up the road, direction is most of what matters. That is what build 3 and the heading work are for.
+
 ### Limits that shape the design
 
 - **Field of view.** A heads-up display covers a small patch. Most things in the world are outside it most of the time, so off-screen cues and one-number screens are the design, not a fallback.
 - **No tracking on anything wearable for sport.** Without cameras the glasses only know which way they face from a compass. A compass is noisy and can be out by a steady amount; in Adelaide magnetic north alone is about 8° from true north, more than the 5° target in B4.
-- **Position comes from the phone.** None of these glasses has its own GPS. The phone must be carried and connected.
+- **Position comes from the phone.** None of these glasses has its own GPS. The phone must be carried and connected, though on the Meta pair it can stay locked in a pocket.
 - **Battery.** Up to about six hours of mixed use on the Meta pair, four on Snap's. A long run or a round of golf is near the limit; draw little, and only when something changes.
 - **Narrow link to the glasses.** The G2 and the ENGO are driven over Bluetooth with small messages. Text and simple shapes, a few times a second; not video.
 - **Sun and sweat.** Brightness and sealing vary. The Meta pair is bright but not sealed for sport; the G2 is sealed against splashes; the ENGO is built for both.
@@ -36,13 +44,13 @@ Checked 2026-11-12. Prices, availability and capabilities come mostly from news 
 | Order | Kit | Rough cost | What it would prove | How our code gets onto it |
 | --- | --- | --- | --- | --- |
 | 1 | An Android phone you already own, with a chest or hand mount | Nothing | Everything in the spec that says "phone", and the anchored ghost through the browser's augmented-reality mode | Already there: it is a web page |
-| 2 | ENGO 3 | US$400 | Whether the gap, the cue and the ghost read at a glance while actually running, in sun and sweat (B3, B10) | A Bluetooth driver. ENGO publishes the command set and says it is open and free. From an Android phone the web page may be able to talk to the glasses directly; that needs trying |
-| 3 | Even Realities G2 | US$599 | A real path to users: its app store has taken third-party apps since April 2026. Golf distances and the gap number suit its text display | Its own kit: a small app on the glasses side fed from the phone. A port of the screens, not of the engine |
-| 4 | Meta Ray-Ban Display | US$799 plus import | The platform the spec names. Our pages run on it as they are. Colour, 600×600, wrist input | Add the URL in the Meta app; nothing to port |
+| 2 | Meta Ray-Ban Display | US$799 plus import | The product as designed, worn: our pages run on it as they are, on the glasses, with the phone in a pocket. Colour, 600×600, wrist input. Whether the compass is good enough to hold a ghost on the road ahead | Add the URL in the Meta app; nothing to port |
+| 3 | ENGO 3 | US$400 | Whether the gap, the cue and the ghost read at a glance while actually running, in sun and sweat (B3, B10) | A Bluetooth driver. ENGO publishes the command set and says it is open and free. From an Android phone the web page may be able to talk to the glasses directly; that needs trying |
+| 4 | Even Realities G2 | US$599 | A real path to users: its app store has taken third-party apps since April 2026. Golf distances and the gap number suit its text display | Its own kit: a small app on the glasses side fed from the phone. A port of the screens, not of the engine |
 | 5 | Xreal Aura | US$1,099 to $1,279 | The direction itself: a ghost and markers placed on the road, in glasses. An investor demo | Android XR runs web augmented reality, so the anchored view built for the phone should carry over. Wired to a pocket unit, so walking and golf, not running |
 | - | Snap Specs | US$2,195 | The same, untethered | Snap's own tools: a rewrite of the display side. Not worth it before the others |
 
-Buy 2 or 3 first, not 4. The Meta pair is the named target but teaches least for the money: it is not sold in Australia, not built for sport, and its store is not open. An ENGO shows whether a runner can use this at all; a G2 shows whether anyone will install it.
+The order was revised on 2026-11-12. The first version put the Meta pair fourth, on the grounds that it is not sold in Australia, not built for sport, and its store is not open. All three are still true. But it is the only pair on which everything built so far runs without a line changed, and the only one where the biggest gap below (a phone that stops reporting when it locks) most likely does not arise. That outweighs the rest for a first purchase. An ENGO then shows whether a runner can wear this at all; a G2 shows whether anyone will install it.
 
 ## The limits in the repo's first notes, and what can be done about them
 
@@ -67,7 +75,7 @@ The notes from before any code was written list things a web app on display glas
 
 The prototypes prove behaviours. A product is the same behaviours when nobody is watching the screen. In rough order of how much each blocks:
 
-1. **It stops when the phone locks.** A web page gets no position once the screen is off. In a pocket, on a real run, that is fatal. Either the app runs on the glasses, which get position through the maker's own phone app, or the phone side becomes a small native app that keeps position running. This is the biggest gap and no amount of desk work on the web page closes it.
+1. **On a phone, it stops when the phone locks.** This is a limit of the stand-in, not of the product as designed. A web page in a phone's browser gets no position once the screen is off. Run on the Meta pair instead, the same page is on the glasses and the phone only supplies position from a pocket, through Meta's own app; that most likely keeps working locked, and needs confirming on a real pair. The gap stays real for glasses that are driven from a phone app of ours, such as the ENGO: there the phone side has to become a small native app.
 2. **It has never been outdoors.** Every number in `docs/results.md` is from replayed or made-up data.
 3. ~~It cannot be installed and needs a signal to load.~~ **Done at the desk.** It can be added to the home screen and, after one visit, every page works with no signal. Not yet tried on a phone.
 4. ~~Runs live in one browser's storage.~~ **Eased.** They still live there, but one file now backs up every run and loads into another phone, and the browser is asked not to clear them. A product would keep them in an account.
@@ -78,7 +86,7 @@ The prototypes prove behaviours. A product is the same behaviours when nobody is
 9. **It draws sixty times a second whether or not anything changed.** That matters on a battery.
 10. **One display.** The screens are drawn for 600×600 colour. A text display over Bluetooth needs its own, simpler screens from the same readings.
 
-Items 3 and 4 are done, and links between friends take the edge off item 5. Items 7, 9 and 10 can still be done at the desk. Item 1 needs a decision about platform. Items 2, 6 and 8 need the owner.
+Items 3 and 4 are done, and links between friends take the edge off item 5. Items 7, 9 and 10 can still be done at the desk. Item 1 needs a pair of glasses to settle. Items 2, 6 and 8 need the owner.
 
 ## Sources
 
@@ -94,6 +102,11 @@ Hardware and platforms:
 - Snap Specs: https://www.cnbc.com/2026/06/16/snap-unveils-2195-specs-ar-glasses-spiegel-bets-on-post-smartphone.html and https://the-gadgeteer.com/2026/06/18/snap-specs-ar-glasses-2026/
 - Meta Ray-Ban Display, countries and web apps: https://roadtovr.com/meta-ray-ban-display-int-launch-connect-2026/, https://developers.meta.com/blog/build-for-display-glasses/ and https://www.engadget.com/2173297/meta-is-bringing-third-party-apps-and-games-to-its-display-glasses/
 - Augmented reality in the browser on Android: https://developers.google.com/ar/develop/webxr/arcore-comparison?hl=en
+- Web apps on the Meta pair, and where their position comes from: https://wearables.developer.meta.com/docs/develop/webapps/build/, https://developers.meta.com/wearables/web-apps/ and https://developers.meta.com/blog/meta-connect-recap-ai-glasses/
+- Location permission for Meta's own walking directions: https://www.meta.com/help/ai-glasses/728826956444153/
+- The Meta pair still needs a phone: https://www.thurrott.com/?p=326813 and https://www.engadget.com/wearables/meta-ray-ban-display-review-chunky-frames-with-impressive-abilities-193127070
+- Not true augmented reality; Orion is: https://moorinsightsstrategy.com/research-notes/meta-ray-ban-display-bridging-the-gap-between-smart-glasses-and-ar/ and https://about.fb.com/news/2024/09/introducing-orion-our-first-true-augmented-reality-glasses/
+- Connect 2026 announcements: https://www.meta.com/blog/meta-connect-2026-everything-we-announced/ and https://vr.org/meta-connect-2026
 
 Getting data in, and golf data:
 

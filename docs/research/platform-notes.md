@@ -49,7 +49,7 @@ Remove sensor listeners when they aren't needed. Meta's docs call out idle liste
 - **Camera and microphone.** A third-party guide from July 2026 says web apps get neither; the native toolkit does. Re-check, since capabilities change.
 - **Bluetooth.** No Web Bluetooth access was found in the docs, so no direct connection to a heart-rate strap or watch.
 - **Spatial anchors.** There is no documented API to pin graphics to a real-world surface or road.
-- **Background running.** Not confirmed either way. Treat the app as foreground-only until tested on a device.
+- **Background running.** Not confirmed for a web app. The app runs on the glasses, so the phone need not be open; position still comes from the phone through the Meta AI app. Meta's own walking directions ask for that app's location permission to be "Always", which is what lets a locked phone keep supplying position. Whether a web app's `watchPosition` keeps arriving for an hour with the phone locked is the first thing to test on a real pair.
 
 ## Tooling
 

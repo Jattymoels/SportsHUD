@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Golf HUD · SportsHUD</title>
+  <link rel="stylesheet" href="golf.css">
+</head>
+<body>
+  <header class="top">
+    <a class="home" href="../../">SportsHUD</a>
+    <h1>Golf HUD</h1>
+    <p class="lede">Silent, glanceable course guidance: how far to the green, where the chosen club lands the ball in today's wind, and the distance to whatever you look at. This is a made-up hole at the desk; a real course comes with map data.</p>
+  </header>
+
+  <main>
+    <p id="message" role="status" hidden></p>
+    <div class="grid">
+      <section class="card" aria-label="On the glasses">
+        <h2>On the glasses <span class="unit" id="viewName"></span></h2>
+        <canvas id="screen" width="600" height="600" tabindex="0" aria-label="The golf display as the glasses would show it"></canvas>
+        <div class="bar transport">
+          <button type="button" data-view="green">Green</button>
+          <button type="button" data-view="club">Club</button>
+          <button type="button" data-view="look">Look</button>
+        </div>
+        <p class="hint">Keys, as on the glasses: Enter moves to the next screen. On the Club screen, Left and Right change club and Up and Down move the aim.</p>
+      </section>
+
+      <section class="card" aria-label="Where you are and the conditions">
+        <h2>Where you are, and the day <span class="unit">stand-ins for GPS, the compass and a forecast</span></h2>
+        <div class="bar">
+          <button type="button" data-spot="0">Tee</button>
+          <button type="button" data-spot="0.42">Lay-up</button>
+          <button type="button" data-spot="0.606">Corner</button>
+          <button type="button" data-spot="0.83">Approach</button>
+          <button type="button" data-spot="0.985">Greenside</button>
+        </div>
+        <label class="slider">Along the hole <output id="alongOut"></output>
+          <input id="along" type="range" min="0" max="1" step="0.001" value="0">
+        </label>
+        <label class="slider">Left or right of the line of play <output id="sideOut"></output>
+          <input id="side" type="range" min="-40" max="40" step="1" value="0">
+        </label>
+        <label class="slider">Facing <output id="headingOut"></output>
+          <input id="heading" type="range" min="0" max="359" step="1" value="0">
+        </label>
+        <label class="slider">Head tilt <output id="tiltOut"></output>
+          <input id="tilt" type="range" min="-80" max="20" step="1" value="-5">
+        </label>
+        <label class="slider">Wind speed <output id="windOut"></output>
+          <input id="wind" type="range" min="0" max="45" step="1" value="12">
+        </label>
+        <label class="slider">Wind from <output id="fromOut"></output>
+          <input id="from" type="range" min="0" max="359" step="5" value="315">
+        </label>
+        <label class="check"><input type="checkbox" id="competition"> Competition: distances only, no club or wind</label>
+        <label class="check"><input type="checkbox" id="follow" checked> Face the target as I move (untick to look around by hand)</label>
+      </section>
+
+      <section class="card wide" aria-label="The numbers">
+        <h2>The numbers behind the screen</h2>
+        <table id="numbers" class="stats"></table>
+      </section>
+
+      <section class="card wide notes" aria-label="What is real here">
+        <h2>What is real here</h2>
+        <ul>
+          <li>The distances are worked out the way they will be on a course: from a position and a mapped outline of the green and hazards. Front and back of the green are along the line from where you stand through its middle.</li>
+          <li>The hole is made up and laid out on a grid, so each number can be checked by hand. It is not a real course.</li>
+          <li>The wind's effect is a rule of thumb: a headwind costs about 1% of carry per mph and a tailwind gives about half that, and a crosswind moves the ball sideways in proportion to carry. It moves the zone the right way; the amounts are placeholders until there are real shots to learn from.</li>
+          <li>The club distances are a typical bag in metres. Yours will replace them.</li>
+          <li>Looking down past 40° for a third of a second hides everything, as at address. Lift your head and it returns.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="golf.js"></script>
+</body>
+</html>

@@ -7,7 +7,7 @@ import { parseGpx, toFixes, findPauses, fillGaps, measureDistance, movingTime } 
 const RUNS_KEY = 'sportshud.runs.v1';
 const SETTINGS_KEY = 'sportshud.settings.v1';
 const PROGRESS_KEY = 'sportshud.progress.v1';
-const KEEP_RUNS = 8;
+const KEEP_RUNS = 12;
 const FIXTURES = new URL('../../fixtures/synthetic/', import.meta.url);
 
 function load(key, fallback) {

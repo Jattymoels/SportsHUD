@@ -436,17 +436,26 @@ function showStatus(message) {
 }
 
 async function importGpx(input) {
-  const file = input.files[0];
+  const files = [...input.files];
   input.value = '';
-  if (!file) return;
-  try {
-    const run = runFromGpx(await file.text());
-    state.runs = [run, ...state.runs.filter((r) => r.id !== run.id)];
-    saveRuns(state.runs);
-    showStatus(`Added ${file.name} as a ghost.`);
-  } catch (error) {
-    showStatus(`${file.name}: ${error.message}`);
+  if (!files.length) return;
+  const added = [];
+  const failed = [];
+  for (const file of files) {
+    try {
+      const run = runFromGpx(await file.text());
+      state.runs = [run, ...state.runs.filter((r) => r.id !== run.id)];
+      added.push(file.name);
+    } catch (error) {
+      failed.push(`${file.name}: ${error.message}`);
+    }
   }
+  // Newest first, whatever order the files came in: the newest are the ones kept, and the ones that win a shared stretch.
+  state.runs.sort((a, b) => b.startedAt - a.startedAt);
+  saveRuns(state.runs);
+  state.runs = [...state.runs.filter((r) => r.demo), ...loadRuns()];
+  const kept = added.length ? `Added ${added.length === 1 ? added[0] : `${added.length} runs`} as ${added.length === 1 ? 'a ghost' : 'ghosts'}.` : '';
+  showStatus([kept, ...failed].filter(Boolean).join(' '));
 }
 
 function exportLatest() {

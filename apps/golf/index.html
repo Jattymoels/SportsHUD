@@ -10,7 +10,7 @@
   <header class="top">
     <a class="home" href="../../">SportsHUD</a>
     <h1>Golf HUD</h1>
-    <p class="lede">Silent, glanceable course guidance: how far to the green, where the chosen club lands the ball in today's wind, and the distance to whatever you look at. This is a made-up hole at the desk; a real course comes with map data.</p>
+    <p class="lede">Silent, glanceable course guidance: how far to the green, where the chosen club lands the ball in today's wind, and the distance to whatever you look at. On the 18 holes of the Grange that OpenStreetMap has mapped, or a made-up hole. At the desk the sliders say where you are; on the course the phone can.
   </header>
 
   <main>
@@ -28,13 +28,27 @@
       </section>
 
       <section class="card" aria-label="Where you are and the conditions">
-        <h2>Where you are, and the day <span class="unit">stand-ins for GPS, the compass and a forecast</span></h2>
+        <h2>Where you are, and the day</h2>
         <div class="bar">
-          <button type="button" data-spot="0">Tee</button>
-          <button type="button" data-spot="0.42">Lay-up</button>
-          <button type="button" data-spot="0.606">Corner</button>
-          <button type="button" data-spot="0.83">Approach</button>
-          <button type="button" data-spot="0.985">Greenside</button>
+          <label>Course
+            <select id="course">
+              <option value="grange">The Grange: the 18 mapped holes</option>
+              <option value="made-up">A made-up hole</option>
+            </select>
+          </label>
+          <label>Hole
+            <select id="holeNo"></select>
+          </label>
+        </div>
+        <label class="check"><input type="checkbox" id="gps"> Use this phone's position (on the course)</label>
+        <label class="check"><input type="checkbox" id="sensors"> Use this phone's compass and tilt (hold it up like a viewfinder)</label>
+        <p class="note" id="status" role="status"></p>
+        <div class="bar" id="spots">
+          <button type="button" data-out="tee">Tee</button>
+          <button type="button" data-out="200">200 out</button>
+          <button type="button" data-out="150">150 out</button>
+          <button type="button" data-out="100">100 out</button>
+          <button type="button" data-out="20">Greenside</button>
         </div>
         <label class="slider">Along the hole <output id="alongOut"></output>
           <input id="along" type="range" min="0" max="1" step="0.001" value="0">
@@ -63,18 +77,28 @@
         <table id="numbers" class="stats"></table>
       </section>
 
+      <section class="card wide" aria-label="Clubs">
+        <h2>The bag <span class="unit">carry in metres, in still air; changes are kept on this device</span></h2>
+        <div id="bag" class="bag"></div>
+        <p><button type="button" id="resetBag">Back to the distances first entered</button></p>
+      </section>
+
       <section class="card wide notes" aria-label="What is real here">
         <h2>What is real here</h2>
         <ul>
           <li>The distances are worked out the way they will be on a course: from a position and a mapped outline of the green and hazards. Front and back of the green are along the line from where you stand through its middle.</li>
-          <li>The hole is made up and laid out on a grid, so each number can be checked by hand. It is not a real course.</li>
+          <li>The Grange layout comes from OpenStreetMap, which has a line of play, par and stroke index for 18 of the club's 36 holes, with their greens, pins, tees, fairways and bunkers. They are on the east side of the property. Nothing has yet been checked against the ground: the pin is wherever the mapper put it, not today's hole.</li>
+          <li>The made-up hole is laid out on a grid, so each number can be checked by hand.</li>
           <li>The wind's effect is a rule of thumb: a headwind costs about 1% of carry per mph and a tailwind gives about half that, and a crosswind moves the ball sideways in proportion to carry. It moves the zone the right way; the amounts are placeholders until there are real shots to learn from.</li>
-          <li>The club distances are a typical bag in metres. Yours will replace them.</li>
+          <li>The club distances are the ones entered for this bag, the middle of each range. Inside the shortest club's distance the zone is drawn for a part shot of the length needed.</li>
+          <li>Your position, when the phone supplies it, stays in the browser.</li>
           <li>Looking down past 40° for a third of a second hides everything, as at address. Lift your head and it returns.</li>
         </ul>
       </section>
     </div>
   </main>
+
+  <footer class="credit">Course layout © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, under the Open Database Licence.</footer>
 
   <script type="module" src="golf.js"></script>
 </body>

@@ -16,8 +16,9 @@ Build 1 of the spec: the track engine and a desk replay harness.
 | `apps/probe/` | The anchoring probe: the route, its markers and the ghost placed over a phone's camera picture, using only GPS and the compass. The nearest thing to glasses that place things in the world, and a first measure of how far off the placing is. |
 | `apps/preview/` | Through the glasses: a recorded run from the runner's eyes, with the ghost and distance markers placed in the world along the route. A preview of where the product is heading, with a switch to the heads-up square that today's display can show. Desk tool. |
 | `apps/route/` | The route guide, as far as past runs alone can take it: the route's length, climb, turns and usual waiting places, as a pre-start screen and as cues on the way. No map data yet, so no water or toilets. |
-| `apps/golf/` | The golf display on a made-up hole: distances to the green, where the chosen club lands the ball in the wind, look to range, and hiding at address. A desk tool so far, with sliders standing in for GPS, the compass and a forecast. |
+| `apps/golf/` | The golf display: distances to the green, where the chosen club lands the ball in the wind, look to range, and hiding at address. On the 18 holes of the Grange that OpenStreetMap has mapped, or a made-up hole. Sliders at the desk; the phone's GPS, compass and tilt on the course. |
 | `apps/replay/` | The desk replay harness: plays a recording at 1× to 60× and shows the live gap to any kind of ghost. |
+| `fixtures/courses/` | Golf courses built from OpenStreetMap by `tools/osm-course.mjs`. |
 | `fixtures/` | Pairs of GPX recordings, listed in `fixtures/index.json`. These are synthetic, written by `fixtures/generate.mjs`, and shaped like real ones: the run has auto-pause holes and both efforts waiting at the same crossing. One pair is two different runs that share 800 m of road, for live segments. |
 | `tools/` | A small local web server and a command-line report for B1 and B12. |
 | `docs/` | The spec and research notes. |
@@ -177,11 +178,31 @@ Ghost run shows the turns and likely waits as cues during a run. Not built yet: 
 - **Look to range** (`lookTarget`): the mapped feature within 7.5° of where you face, and its distance. `lookAround` says which way to turn when nothing is.
 - **Hide at address** (`createAddressHider`): looking down past 40° for a third of a second hides the display; it returns when the gaze comes back above 25° down. Two angles, so a head held near the line does not make it flicker.
 
-The clubs are a typical bag in metres, to be replaced by the golfer's own.
+`fixtures/golf.mjs` is a made-up par 4 laid out on a grid, so that every expected number in `engine/tests/golf.test.js` is a hand calculation.
 
-`fixtures/golf.mjs` is a made-up par 4 laid out on a grid, so that every expected number in `engine/tests/golf.test.js` is a hand calculation. `apps/golf/` shows three glasses screens on it (the green, the club and its zone, look to range), with sliders for where you are, which way you face, how far your head is tilted, and the wind. Enter moves between screens; on the club screen Left and Right change club and Up and Down move the aim. "Competition" leaves distances only.
+### A real course
 
-Not built yet: a real course from map data, your position from GPS, the compass and tilt from the device, wind from a forecast, and entering your own club distances. So B7 and B9, which need a course, are untested.
+OpenStreetMap draws a course as separate things: an outline, a line of play for each hole with its number and par, and an outline for each green, tee, bunker and fairway, with a point for each pin. Nothing says which bunker belongs to which hole. `courseFromOsm` in `engine/course.js` puts each thing with the holes it lies beside (within 50 m of the line of play, or 45 m of the middle of the green) and names each hazard by where it lies: "Fairway bunker, left", "Greenside bunker, right". `holeAt` says which hole you are on from where you stand, without flipping to the next tee while you are still on a green.
+
+`fixtures/courses/grange.json` is the Grange Golf Club, Adelaide, built this way:
+
+```bash
+node tools/osm-course.mjs map.json fixtures/courses/grange.json --name=Grange
+```
+
+where `map.json` is OpenStreetMap's map call for the area of the course. What the map holds there, as of 12 November 2026: a line of play, par and stroke index for 18 of the club's 36 holes (par 72, 6,379 m, on the east side of the property), every one with its green, a pin, tees, fairway and bunkers; and for the other 18, greens and bunkers but no lines of play, so they cannot be used yet. In all, 37 greens, 66 tees, 41 fairways, 123 bunkers and 3 water hazards. None of it has been checked against the ground, and a mapped pin is where the mapper put it, not today's hole.
+
+The course file is derived from OpenStreetMap, © OpenStreetMap contributors, and is available under the Open Database Licence (ODbL) like its source.
+
+### The golf page
+
+`apps/golf/` shows three glasses screens (the green, the club and its zone, look to range). Enter moves between them; on the club screen Left and Right change club and Up and Down move the aim; on the green screen Up and Down change hole. "Competition" leaves distances only.
+
+- **At the desk,** sliders say where you are on the hole, which way you face, how far your head is tilted, and the wind.
+- **On the course,** tick "Use this phone's position" and the hole is found from where you stand. Tick "Use this phone's compass and tilt" and hold the phone up like a viewfinder: facing sets look to range, and tipping it down hides the display as at address. Your position stays in the browser.
+- **The bag** is the set of carry distances entered for it, editable on the page and kept on the device. When the green is out of reach the club offered is the longest whose landing zone stays out of trouble (the driver only from the tee); otherwise the one nearest the distance, or a part shot inside the shortest club.
+
+Not built yet: wind from a forecast (it is a slider), the other 18 holes, and any check against a rangefinder. So B7 and B9 are ready to test on the course but untested.
 
 ## Deployment
 

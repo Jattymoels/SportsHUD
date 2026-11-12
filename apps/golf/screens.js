@@ -64,7 +64,7 @@ function windMark(ctx, x, y, wind, facing, color = INK) {
 
 function header(ctx, v) {
   text(ctx, `HOLE ${v.hole.number}`, 28, 50, 26, { align: 'left', weight: 600 });
-  text(ctx, `PAR ${v.hole.par}`, 28, 80, 20, { align: 'left', color: DIM });
+  if (v.hole.par) text(ctx, `PAR ${v.hole.par}`, 28, 80, 20, { align: 'left', color: DIM });
   if (!v.competition) windMark(ctx, SIZE - 28, 44, v.wind, v.aim);
 }
 
@@ -125,7 +125,8 @@ export function drawClub(ctx, v) {
   ctx.beginPath();
   ctx.rect(0, 96, SIZE, 440);
   ctx.clip();
-  if (v.hole.fairway) stroke(ctx, v.hole.fairway.map(toPx), DIM, 1.5, { closed: true });
+  for (const fairway of v.hole.fairways ?? (v.hole.fairway ? [v.hole.fairway] : [])) stroke(ctx, fairway.map(toPx), DIM, 1.5, { closed: true });
+  for (const tee of v.hole.tees ?? []) stroke(ctx, tee.map(toPx), DIM, 1.5, { closed: true });
   for (const hazard of v.hole.hazards ?? []) {
     stroke(ctx, hazard.shape.map(toPx), hazard.kind === 'water' ? WATER : INK, 2, { closed: true, dash: hazard.kind === 'water' ? null : [5, 5] });
   }
@@ -170,7 +171,7 @@ export function drawClub(ctx, v) {
   }
   // The line at the bottom: trouble first, else the nearest hazard's numbers.
   const nearest = v.inPlay[0];
-  if (v.trouble) text(ctx, `${v.trouble.toUpperCase()} IN REACH`, 300, 574, 28, { color: BEHIND, weight: 600 });
+  if (v.trouble) text(ctx, `REACHES: ${v.trouble.toUpperCase()}`, 300, 574, 26, { color: BEHIND, weight: 600 });
   else if (nearest) text(ctx, `${nearest.name}: reach ${m(nearest.reach)}, carry ${m(nearest.carry)}`, 300, 574, 24, { color: DIM });
   else text(ctx, `green ${m(v.toGreen)}`, 300, 574, 24, { color: DIM });
 }

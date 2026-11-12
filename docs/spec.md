@@ -96,7 +96,7 @@ Five builds, in this order, cover all ten behaviours. Each is tested at the desk
 2. **Ghost race screen.** A 600×600 display showing the gap in seconds and metres, a ghost marker ahead or behind, and current pace. Proves B3 and B10.
 3. **Anchoring probe.** A test screen that places a marker toward a chosen target and logs compass heading, position and marker error. Proves B4 and B5, and tells us early whether anchored graphics are good enough for builds 4 and 5.
 4. **Route guide.** A pre-start preview and a next-marker cue, using OpenStreetMap for water points and toilets. Proves B6. *Started 2026-11-12 with the part that needs no map: distance, climb, turns, pause points and distance markers worked out from past runs of the route, shown as the pre-start screen and as cues. Water and toilets are not built, so B6 is untested.*
-5. **Golf HUD.** One mapped course: green distances, a club picker that draws the landing zone, wind, look-to-range, and auto-hide at address. Proves B7 to B10. *Started 2026-11-12 on a made-up hole at the desk: the maths for all four and three first screens. At the desk, B8 passes (zone centre on the club's carry before wind; wind moves it the correct way) and the display hides 0.3 s after looking down against B10's 1 s. B7 and B9 need a mapped course, so they are untested, as is the 2-second read in B10.*
+5. **Golf HUD.** One mapped course: green distances, a club picker that draws the landing zone, wind, look-to-range, and auto-hide at address. Proves B7 to B10. *Started 2026-11-12 on a made-up hole at the desk: the maths for all four and three first screens. At the desk, B8 passes (zone centre on the club's carry before wind; wind moves it the correct way) and the display hides 0.3 s after looking down against B10's 1 s. B7 and B9 need a mapped course, so they are untested, as is the 2-second read in B10. The Grange's 18 mapped holes were added the same day, with position, compass and tilt from the phone, so B7 and B9 can now be tested on the course.*
 
 Each behaviour ends with a short written result: the measured number, pass or fail, and what it means for the design.
 
@@ -138,7 +138,7 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 | Working name | SportsHUD, a placeholder; also the GitHub repository name |
 | First sport | Running |
 | Field-test phone | Android |
-| Golf test course | Grange, with member access, or West Beach as a public option |
+| Golf test course | Grange. Chosen 2026-11-12. OpenStreetMap has 18 of its 36 holes mapped with lines of play, on the east side of the property |
 | Rangefinder for B7 | Available |
 | Direction | The ghost and the route's markers are to be placed in the world in front of the runner, like a time-trial ghost in a racing game showing a personal best, with distance markers coming up along the route. A heads-up panel of numbers is what competitors already show. Today's Ray-Ban Display cannot place things in the world, so this does not have to work on current hardware; `apps/preview/` shows what it would look like. Stated 2026-11-12 |
 | Clock | Everyday runs: paused time does not count, as on a watch. Races: the clock never stops. The engine does both; everyday is the default. Agreed 2026-11-11 |
@@ -153,8 +153,9 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 - [ ] A recording of a run that shares only part of the commute route, to try live segments on real ground. So far it has been tried on a made-up run, and on the two commute runs with one cut down to its middle.
 - [ ] What distance and elevation gain does the watch or Strava show for the two test runs? Needed to check the distance target in B11 and the route guide's climb figure.
 - [ ] More recordings of the commute route. The route guide's "likely waits" need several runs to say how likely each is; two only show that a wait happened.
-- [ ] Grange or West Beach? Check how well each is mapped in OpenStreetMap before choosing.
-- [ ] Approximate carry distance for each club, needed before build 5.
+- [x] Grange or West Beach? Grange, chosen 2026-11-12. Mapped in OpenStreetMap for 18 of 36 holes: enough for B7 and B9.
+- [x] Approximate carry distance for each club. Given 2026-11-12, ten clubs from driver (240 m) to a 52° wedge (100 m).
+- [ ] Which of the Grange's two courses are the 18 mapped holes? They sit on the east side; the first nine run par 4, 4, 3, 4, 3, 4, 5, 4, 5.
 - [ ] Are the proposed pass targets right, especially B3 and B4?
 - [ ] What is the budget and route for importing display glasses for Checkpoint 2?
 - [ ] Does Australia count as a supported country for Meta's Wearables Developer Center? Meta says full access is limited to supported countries.

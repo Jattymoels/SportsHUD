@@ -29,6 +29,22 @@ export const GPS_NOISE = { drift: 2.5, jitter: 0.5 };
 export const NO_NOISE = { drift: 0, jitter: 0 };
 const DRIFT_PERIODS = [75, 170, 410]; // seconds
 
+/**
+ * The ground, for elevation in the recordings: height in metres at a point
+ * `x` metres east and `y` metres north of the origin. It rises gently to
+ * the north-east, with a hill over the far side of the run's loop.
+ */
+export function terrain(x, y) {
+  return 20 + 0.012 * x + 0.008 * y + 14 * Math.exp(-((x - 250) ** 2 + (y - 330) ** 2) / (2 * 110 ** 2));
+}
+
+/**
+ * Elevation error model, in metres, for a watch with a barometer: each
+ * recording starts up to `offset` out, wanders slowly by about `wander`,
+ * and reads in 0.2 m steps.
+ */
+export const ELE_NOISE = { offset: 4, wander: 0.6, step: 0.2 };
+
 // ---------------------------------------------------------------- paths --
 
 /** Smooth curve through waypoints (Catmull-Rom), as points about 1 m apart. */
@@ -232,7 +248,7 @@ function truthFor(path, effort) {
 
 /**
  * One effort as a GPS recording.
- * @returns {{fixes: Array<{t:number, lat:number, lon:number}>, truth: number[], step: number}}
+ * @returns {{fixes: Array<{t:number, lat:number, lon:number, ele:number}>, truth: number[], step: number}}
  *   `truth[i]` is the true distance along the path at `i * step` seconds.
  */
 export function simulate(scenario, who, noise = GPS_NOISE) {
@@ -250,6 +266,14 @@ export function simulate(scenario, who, noise = GPS_NOISE) {
   const driftX = wave();
   const driftY = wave();
   const truthAt = (t) => truth[Math.max(0, Math.min(truth.length - 1, Math.round(t / STEP)))];
+  // Elevation has its own random numbers, so that adding it changed no positions.
+  const eleRng = random(effort.seed + 1000);
+  const eleOffset = noise === NO_NOISE ? 0 : ELE_NOISE.offset * (2 * eleRng.uniform() - 1);
+  const elePhase = 2 * Math.PI * eleRng.uniform();
+  const eleAt = (x, y, t) => {
+    const wander = noise === NO_NOISE ? 0 : ELE_NOISE.wander * Math.sin((2 * Math.PI * t) / 260 + elePhase);
+    return Math.round((terrain(x, y) + eleOffset + wander) / ELE_NOISE.step) * ELE_NOISE.step;
+  };
   const fixes = [];
   let paused = false;
   for (let t = 0; ; t = Math.min(Math.ceil(duration), t + 1)) {
@@ -264,6 +288,7 @@ export function simulate(scenario, who, noise = GPS_NOISE) {
       t,
       lat: ORIGIN.lat + (y + driftY(t) + noise.jitter * rng.normal()) / M_PER_DEG_LAT,
       lon: ORIGIN.lon + (x + driftX(t) + noise.jitter * rng.normal()) / M_PER_DEG_LON,
+      ele: eleAt(x, y, t),
     });
     if (t >= duration) break;
   }
@@ -292,7 +317,7 @@ export function toGpx(scenario, who, fixes) {
     '<gpx version="1.1" creator="SportsHUD fixtures/generate.mjs" xmlns="http://www.topografix.com/GPX/1/1">',
     ` <metadata><name>${name}</name><time>${stamp(0)}</time></metadata>`,
     ` <trk><name>${name}</name><type>${scenario.gpxType}</type><trkseg>`,
-    ...fixes.map((f) => `  <trkpt lat="${f.lat.toFixed(6)}" lon="${f.lon.toFixed(6)}"><time>${stamp(f.t)}</time></trkpt>`),
+    ...fixes.map((f) => `  <trkpt lat="${f.lat.toFixed(6)}" lon="${f.lon.toFixed(6)}"><ele>${f.ele.toFixed(1)}</ele><time>${stamp(f.t)}</time></trkpt>`),
     ' </trkseg></trk>',
     '</gpx>',
     '',

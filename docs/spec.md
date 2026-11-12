@@ -95,7 +95,7 @@ Five builds, in this order, cover all ten behaviours. Each is tested at the desk
 1. **Track engine and replay harness.** Reads a GPS recording, snaps positions to the route, and computes distance along it and the gap between two recordings. Replays any recording at the desk. Proves B1 and B2. Everything else depends on it.
 2. **Ghost race screen.** A 600×600 display showing the gap in seconds and metres, a ghost marker ahead or behind, and current pace. Proves B3 and B10.
 3. **Anchoring probe.** A test screen that places a marker toward a chosen target and logs compass heading, position and marker error. Proves B4 and B5, and tells us early whether anchored graphics are good enough for builds 4 and 5.
-4. **Route guide.** A pre-start preview and a next-marker cue, using OpenStreetMap for water points and toilets. Proves B6.
+4. **Route guide.** A pre-start preview and a next-marker cue, using OpenStreetMap for water points and toilets. Proves B6. *Started 2026-11-12 with the part that needs no map: distance, climb, turns, pause points and distance markers worked out from past runs of the route, shown as the pre-start screen and as cues. Water and toilets are not built, so B6 is untested.*
 5. **Golf HUD.** One mapped course: green distances, a club picker that draws the landing zone, wind, look-to-range, and auto-hide at address. Proves B7 to B10.
 
 Each behaviour ends with a short written result: the measured number, pass or fail, and what it means for the design.
@@ -151,7 +151,8 @@ Each gate is a decision to continue, change course or stop. Checkpoint 2 is the 
 - [x] Two GPX recordings of the same running route, for B1. Supplied 2026-11-11; B1 passes on them at the desk.
 - [x] The pace ghost: which pace? Answered 2026-11-11; see "Pace ghost" above. A set pace and live segments are both built at the desk.
 - [ ] A recording of a run that shares only part of the commute route, to try live segments on real ground. So far it has been tried on a made-up run, and on the two commute runs with one cut down to its middle.
-- [ ] What distance does the watch or Strava show for the two test runs? Needed to check the distance target in B11.
+- [ ] What distance and elevation gain does the watch or Strava show for the two test runs? Needed to check the distance target in B11 and the route guide's climb figure.
+- [ ] More recordings of the commute route. The route guide's "likely waits" need several runs to say how likely each is; two only show that a wait happened.
 - [ ] Grange or West Beach? Check how well each is mapped in OpenStreetMap before choosing.
 - [ ] Approximate carry distance for each club, needed before build 5.
 - [ ] Are the proposed pass targets right, especially B3 and B4?

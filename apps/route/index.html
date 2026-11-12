@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Route guide · SportsHUD</title>
+  <link rel="stylesheet" href="route.css">
+</head>
+<body>
+  <header class="top">
+    <a class="home" href="../../">SportsHUD</a>
+    <h1>Route guide</h1>
+    <p class="lede">What your past runs of a route say about it: how far, how much climb, where it turns and where you tend to have to wait. Shown as the glasses would show it before the start, and as cues on the way. No map is used yet, so there is no water or toilets.</p>
+  </header>
+
+  <main>
+    <section class="bar" aria-label="Route">
+      <label>Route
+        <select id="pick"></select>
+      </label>
+      <label>Past runs of one route, as GPX (choose several)
+        <input type="file" id="files" accept=".gpx,application/gpx+xml,text/xml" multiple>
+      </label>
+    </section>
+    <p id="message" role="status" hidden></p>
+
+    <div class="grid">
+      <section class="card" aria-label="On the glasses">
+        <h2>On the glasses <span class="unit" id="viewName"></span></h2>
+        <canvas id="screen" width="600" height="600" tabindex="0" aria-label="The route guide as the glasses would show it"></canvas>
+        <div class="bar transport">
+          <button id="toggle" type="button">What is coming up</button>
+          <button id="play" type="button">Run it through</button>
+        </div>
+        <label class="along">Where you are along the route
+          <input id="along" type="range" min="0" max="1" step="10" value="0">
+        </label>
+        <p class="hint">Keys, as on the glasses: Enter switches between the two screens, Left and Right move 50 m, Up and Down jump to the next or last thing on the route.</p>
+      </section>
+
+      <section class="card" aria-label="Summary">
+        <h2>What the past runs say <span class="unit" id="basis"></span></h2>
+        <dl class="tiles">
+          <div><dt>Distance</dt><dd id="distance">–</dd></div>
+          <div><dt>Climb</dt><dd id="climb">–</dd><dd class="sub" id="climbSub"></dd></div>
+          <div><dt id="timeLabel">Usual time</dt><dd id="time">–</dd><dd class="sub" id="timeSub"></dd></div>
+          <div><dt>Waiting</dt><dd id="waits">–</dd><dd class="sub" id="waitsSub"></dd></div>
+          <div><dt>Turns</dt><dd id="turns">–</dd><dd class="sub" id="turnsSub"></dd></div>
+          <div><dt>Climbs to know about</dt><dd id="climbs">–</dd><dd class="sub" id="climbsSub"></dd></div>
+        </dl>
+        <p class="note" id="caveat"></p>
+      </section>
+
+      <section class="card wide" aria-label="Elevation along the route">
+        <h2>Height along the route <span class="unit">metres above sea level, by distance</span></h2>
+        <ul class="legend">
+          <li><span class="key dot wait"></span>A place past runs waited</li>
+          <li><span class="key band climb"></span>A climb to know about</li>
+          <li><span class="key tick"></span>A turn</li>
+          <li><span class="key line here"></span>Where you are</li>
+        </ul>
+        <div id="chart" class="plot chart"></div>
+        <div id="tip" class="tip" hidden></div>
+      </section>
+
+      <section class="card wide" aria-label="Along the route">
+        <h2>Along the route</h2>
+        <p class="note">Everything the glasses could cue, in order. Choose a row to stand just before it.</p>
+        <div class="scroll"><table id="table"></table></div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="route.js"></script>
+</body>
+</html>

@@ -96,7 +96,7 @@ The aim is glasses that put the ghost on the road in the runner's view. [docs/de
 - **The head** comes from the device's motion sensors, with no compass. "Line up" (look level along the route and tap, or press Enter) tells it how the device sits on the head, whichever way round that is, and which way the route runs. From then on `createTravelAnchor` keeps the heading true from the way you run. On made-up sensors that wander 1.5° a minute it is typically 1.2° out. Its weakness is a head held to one side for minutes, which it takes for wander.
 - **The picture** is set to suit what shows it: how many degrees of view it covers, one picture or one for each eye, flipped for a display seen in a mirror, raised, lowered or turned by a degree at a time. The arrow keys do the last two, for glasses or a small remote.
 - **Routes** come from saved runs, a GPX, or a link (`apps/ar/#ghost=...`), which is how a route reaches glasses that have no files.
-- **Recording** saves what the motion sensors and GPS report during a run as a CSV, to test the heading work against a real head.
+- **A head test** writes down what the motion sensors and GPS report while you run, to test the heading work against a real head. It needs no route and shows nothing: fix the phone to your head, tap "Start a head test", run for ten minutes round a few corners. The screen ignores touches until two fingers hold it for two seconds. What is written is copied into the browser's storage every five seconds, and if the browser drops the page part-way the test carries on by itself when the page comes back. The download is a compressed CSV. The page lists the steps.
 
 ```bash
 npm run view -- my-run.gpx

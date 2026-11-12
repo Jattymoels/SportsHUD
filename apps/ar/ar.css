@@ -47,3 +47,5 @@ output { color: #f4f4ee; font-variant-numeric: tabular-nums; }
 summary { cursor: pointer; margin-top: 14px; }
 ul { padding-left: 20px; }
 li { margin: 6px 0; }
+ol { padding-left: 22px; }
+fieldset .row { margin: 0; }

@@ -58,6 +58,11 @@ export function duration(seconds) {
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`;
 }
 
+/** How many different places of a kind are in a list where one place can be passed, and listed, more than once. */
+export function places(amenities, kind) {
+  return new Set((amenities ?? []).filter((a) => a.kind === kind).map((a) => `${a.lat},${a.lon}`)).size;
+}
+
 /** Index of the first route point at or beyond `d` metres. */
 function indexAt(route, d) {
   let lo = 0;
@@ -158,6 +163,26 @@ function glyph(ctx, feature, cx, cy, color) {
     stroke(ctx, [[cx - 64, cy + 48], [cx + 64, cy + 48], [cx + 64, cy - 30], [cx - 64, cy + 48]], color, 7);
     stroke(ctx, [[cx - 40, cy - 6], [cx + 10, cy - 46]], color, 7);
     stroke(ctx, [[cx - 14, cy - 50], [cx + 10, cy - 46], [cx + 2, cy - 22]], color, 7);
+  } else if (feature.kind === 'water') {
+    // A drop.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 8;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 62);
+    ctx.bezierCurveTo(cx + 14, cy - 30, cx + 44, cy - 6, cx + 44, cy + 22);
+    ctx.arc(cx, cy + 22, 44, 0, Math.PI);
+    ctx.bezierCurveTo(cx - 44, cy - 6, cx - 14, cy - 30, cx, cy - 62);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (feature.kind === 'toilets') {
+    // A sign with the two letters every runner knows.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.roundRect(cx - 70, cy - 50, 140, 104, 14);
+    ctx.stroke();
+    text(ctx, 'WC', cx, cy + 26, 68, { color, weight: 700 });
   } else if (feature.kind === 'marker') {
     // A gate across the path.
     stroke(ctx, [[cx - 56, cy + 56], [cx - 56, cy - 44], [cx + 56, cy - 44], [cx + 56, cy + 56]], color, 8);
@@ -181,6 +206,10 @@ export function describe(feature) {
   }
   if (feature.kind === 'climb') return { title: 'CLIMB', detail: `${Math.round(feature.gain)} m up over ${metres(feature.length)}` };
   if (feature.kind === 'marker') return { title: feature.label, detail: '' };
+  if (feature.kind === 'water' || feature.kind === 'toilets') {
+    const where = feature.off < 15 ? 'beside the route' : `${metres(feature.off)} to the ${feature.side}`;
+    return { title: feature.kind === 'water' ? 'WATER' : 'TOILETS', detail: where };
+  }
   return { title: 'FINISH', detail: '' };
 }
 
@@ -194,7 +223,10 @@ export function describe(feature) {
  */
 export function drawPreview(ctx, guide, name) {
   clear(ctx);
-  text(ctx, name.toUpperCase(), 300, 44, 22, { color: DIM, weight: 600 });
+  const water = places(guide.amenities, 'water');
+  const toilets = places(guide.amenities, 'toilets');
+  const stops = guide.amenities ? `   ·   ${water} WATER   ·   ${toilets} TOILETS` : '';
+  text(ctx, name.toUpperCase() + stops, 300, 44, 22, { color: DIM, weight: 600 });
 
   // The route: its line, the climbs brighter, a mark at each place runs wait.
   const { route } = guide;

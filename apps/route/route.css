@@ -134,3 +134,11 @@ tbody tr:hover td { background: var(--page); }
 tbody tr.next td { font-weight: 600; }
 tbody tr.passed td { color: var(--muted); }
 tbody tr:focus-visible { outline: 2px solid var(--height); outline-offset: -2px; }
+
+.key.square { width: 9px; height: 9px; border: 2px solid var(--ink-2); }
+.key.square.water { border-radius: 50%; transform: none; }
+.key.square.toilets { border-radius: 1px; }
+.plot .amenity { fill: var(--surface); stroke: var(--ink-2); stroke-width: 2; }
+.bar .note { align-self: center; margin: 0; }
+.credit { max-width: 1100px; margin: 14px auto 0; font-size: 12px; color: var(--ink-2); }
+.credit a { color: inherit; }

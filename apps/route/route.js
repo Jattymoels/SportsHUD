@@ -1,11 +1,12 @@
 // Route guide. Everything shown comes from engine/guide.js; this file loads
 // recordings, keeps track of where along the route you are looking, and draws.
 
-import { parseGpx, toFixes, buildRoute, buildGuide, groupRuns, nextCue } from '../../engine/index.js';
+import { parseGpx, toFixes, buildRoute, buildGuide, groupRuns, nextCue, amenityQuery, amenitiesAlong, withAmenities } from '../../engine/index.js';
 import { clock } from '../ghost/hud.js';
-import { drawPreview, drawComing, describe, metres, wait } from './screen.js';
+import { drawPreview, drawComing, describe, metres, wait, places } from './screen.js';
 
 const FIXTURES = new URL('../../fixtures/', import.meta.url);
+const OVERPASS = 'https://overpass-api.de/api/interpreter';
 const SVG = 'http://www.w3.org/2000/svg';
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -111,10 +112,38 @@ function start(recordings, name) {
   state.along = 0;
   state.playing = false;
   $('along').max = Math.floor(guide.length);
+  $('lookupNote').textContent = "Asks OpenStreetMap's public query service, which is sent the area the route covers. Nothing is asked until you press this.";
   renderSummary();
   buildChart();
   buildTable();
   render();
+}
+
+/** Ask OpenStreetMap for the water points and toilets around the route, and add them to the guide. */
+async function lookUp() {
+  if (!state.guide) return;
+  const button = $('lookup');
+  button.disabled = true;
+  $('lookupNote').textContent = 'Asking OpenStreetMap…';
+  try {
+    const response = await fetch(OVERPASS, { method: 'POST', body: new URLSearchParams({ data: amenityQuery(state.guide.route) }) });
+    if (!response.ok) throw new Error(`The map service answered ${response.status}`);
+    const found = amenitiesAlong(state.guide.route, await response.json());
+    state.guide = withAmenities(state.guide, found);
+    const water = places(found, 'water');
+    const toilets = places(found, 'toilets');
+    $('lookupNote').textContent = found.length
+      ? `Within 100 m of the route: ${plural(water, 'water point')} and ${toilets === 1 ? '1 toilet block' : `${toilets} toilet blocks`}, as mapped. Not checked against the ground.`
+      : 'Nothing is mapped within 100 m of the route. That may mean there is none, or that nobody has mapped it.';
+    renderSummary();
+    buildChart();
+    buildTable();
+    render();
+  } catch (error) {
+    $('lookupNote').textContent = `Could not look them up: ${error.message}. Nothing has changed.`;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // --------------------------------------------------------------- summary --
@@ -229,6 +258,11 @@ function buildChart() {
   }
   for (const turn of g.turns) svgEl('line', { class: 'turn', x1: x(turn.dist), x2: x(turn.dist), y1: floor - 7, y2: floor - 1 }, svg);
   for (const place of g.pausePoints) svgEl('circle', { class: 'wait', cx: x(place.dist), cy: onLine(place.dist), r: 5 }, svg);
+  // Water (a ring) and toilets (a square), in a row across the top.
+  for (const a of g.amenities ?? []) {
+    if (a.kind === 'water') svgEl('circle', { class: 'amenity', cx: x(a.dist), cy: m.top - 9, r: 4.5 }, svg);
+    else svgEl('rect', { class: 'amenity', x: x(a.dist) - 4.5, y: m.top - 13.5, width: 9, height: 9, rx: 1 }, svg);
+  }
 
   const here = svgEl('line', { class: 'here', y1: m.top - 6, y2: floor }, svg);
   const cross = svgEl('line', { class: 'cross', y1: m.top - 6, y2: floor, visibility: 'hidden' }, svg);
@@ -277,7 +311,7 @@ function showTip(event, dist, reach) {
     const within = f.kind === 'climb' ? dist >= f.from - reach && dist <= f.to + reach : Math.abs(f.dist - dist) <= reach;
     if (!within) continue;
     const words = inWords(f);
-    row(words.what, words.detail, f.kind === 'wait' ? 'dot wait' : f.kind === 'climb' ? 'band climb' : 'tick');
+    row(words.what, words.detail, f.kind === 'wait' ? 'dot wait' : f.kind === 'climb' ? 'band climb' : f.kind === 'water' ? 'square water' : f.kind === 'toilets' ? 'square toilets' : 'tick');
   }
 
   tip.hidden = false;
@@ -305,6 +339,10 @@ function inWords(f) {
   }
   if (f.kind === 'climb') return { what: 'Climb', detail: `${Math.round(f.gain)} m up over ${metres(f.length)}, ${(100 * f.grade).toFixed(1)}%` };
   if (f.kind === 'marker') return { what: `${f.label} marker`, detail: '' };
+  if (f.kind === 'water' || f.kind === 'toilets') {
+    const where = f.off < 15 ? 'beside the route' : `${metres(f.off)} to the ${f.side}`;
+    return { what: f.kind === 'water' ? 'Water' : 'Toilets', detail: f.name ? `${f.name}; ${where}` : where };
+  }
   return { what: 'Finish', detail: '' };
 }
 
@@ -434,6 +472,7 @@ async function init() {
     else loadPair(value);
   });
   $('files').addEventListener('change', (event) => chooseFiles(event.target));
+  $('lookup').addEventListener('click', lookUp);
   document.addEventListener('keydown', onKey);
 
   let resizing = null;

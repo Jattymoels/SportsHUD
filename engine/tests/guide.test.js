@@ -3,9 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildRoute, buildGuide, groupRuns, elevationAlong, upsAndDowns, findTurns, agreedTurns, findPausePoints, distanceMarkers, upcoming, nextCue, parseGpx } from '../index.js';
+import { buildRoute, buildGuide, groupRuns, elevationAlong, upsAndDowns, findTurns, agreedTurns, findPausePoints, distanceMarkers, upcoming, nextCue, amenityQuery, amenitiesAlong, withAmenities, parseGpx } from '../index.js';
 import { SCENARIOS, terrain } from '../../fixtures/generate.mjs';
-import { path, steady, recording, noise } from './helpers.js';
+import { path, steady, recording, noise, at } from './helpers.js';
 
 const near = (actual, expected, tolerance, label = '') =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${label} expected ${expected} ± ${tolerance}, got ${actual}`);
@@ -321,4 +321,78 @@ test('a run that takes another street for a while has not waited there', () => {
   const climb = elevationAlong(route, [plain(3), detour, plain(3.1)]);
   near(climb.highest, 28, 1.5, 'highest point');
   near(climb.gain, 18, 2, 'climb');
+});
+
+// ---------------------------------------------------- water and toilets --
+
+test('water points and toilets beside a route, from map data', () => {
+  // A route 600 m east, then north. Map data in OpenStreetMap's shape.
+  const route = buildRoute(path([[0, 0], [600, 0], [600, 400]]));
+  const node = (x, y, tags) => ({ type: 'node', id: Math.round(x * 1000 + y), ...at(x, y), tags });
+  const osm = {
+    elements: [
+      node(200, 30, { amenity: 'drinking_water' }), // 30 m to the left of the first leg
+      node(400, -60, { amenity: 'toilets', name: 'Park toilets' }), // 60 m to the right
+      { type: 'way', id: 9, center: at(404, -66), tags: { amenity: 'toilets', building: 'yes' } }, // the same block, mapped as a building
+      node(640, 300, { man_made: 'water_tap', drinking_water: 'yes' }), // 40 m to the right of the second leg
+      node(300, 250, { amenity: 'drinking_water' }), // 250 m from the route: too far
+      node(100, 10, { amenity: 'bench' }), // not what is asked for
+      node(500, 5, { amenity: 'fountain' }), // a fountain not marked as drinkable
+    ],
+  };
+  const found = amenitiesAlong(route, osm);
+  assert.deepEqual(found.map((f) => [f.kind, f.side, f.name]), [['water', 'left', null], ['toilets', 'right', 'Park toilets'], ['water', 'right', null]]);
+  near(found[0].dist, 200, 2);
+  near(found[0].off, 30, 1);
+  near(found[1].dist, 400, 2);
+  near(found[2].dist, 600 + 300, 4, 'on the second leg');
+  near(found[2].off, 40, 1);
+  // A wider reach takes in the far one.
+  assert.equal(amenitiesAlong(route, osm, { within: 300 }).length, 4);
+  assert.deepEqual(amenitiesAlong(route, { elements: [] }), []);
+});
+
+test('a water point passed on the way out and again on the way back is listed both times', () => {
+  // 400 m out along a street and back again; a tap 12 m north of the street at the 150 m mark.
+  const route = buildRoute(path([[0, 0], [400, 0], [0, 0]]));
+  const found = amenitiesAlong(route, { elements: [{ type: 'node', id: 1, ...at(150, 12), tags: { amenity: 'drinking_water' } }] });
+  assert.equal(found.length, 2);
+  near(found[0].dist, 150, 4, 'on the way out');
+  near(found[1].dist, 650, 6, 'on the way back');
+  // On its left going out, on its right coming back.
+  assert.deepEqual(found.map((f) => f.side), ['left', 'right']);
+});
+
+test('water and toilets join the guide, and are mentioned in passing like a distance marker', () => {
+  const run = recording(steady(path([[0, 0], [1200, 0]]), 3));
+  const guide = buildGuide([run]);
+  const node = (x, y, tags) => ({ type: 'node', id: x, ...at(x, y), tags });
+  const amenities = amenitiesAlong(guide.route, { elements: [node(300, 20, { amenity: 'drinking_water' }), node(900, -40, { amenity: 'toilets' })] });
+  const full = withAmenities(guide, amenities);
+  assert.deepEqual(full.features.map((f) => f.kind), ['water', 'marker', 'toilets', 'marker', 'finish']);
+  assert.equal(full.amenities.length, 2);
+  // 100 m short of the water point, with nothing to act on nearby: it is the cue.
+  let cue = nextCue(full, 200);
+  assert.deepEqual([cue.now.kind, cue.now.side], ['water', 'left']);
+  near(cue.now.in, 100, 3);
+  assert.equal(cue.then.kind, 'finish');
+  // Far from it: the cue is the next thing to act on, as before.
+  assert.equal(nextCue(full, 0).now.kind, 'finish');
+  // Adding again replaces, rather than doubling up.
+  assert.equal(withAmenities(full, amenities).features.length, full.features.length);
+});
+
+test('the question put to the map service covers the route with room to spare', () => {
+  const route = buildRoute(path([[0, 0], [600, 0], [600, 400]]));
+  const query = amenityQuery(route, 150);
+  assert.match(query, /^\[out:json\]/);
+  assert.match(query, /drinking_water\|water_point\|toilets/);
+  assert.match(query, /out center tags;$/);
+  const [south, west, north, east] = /\(([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\)/.exec(query).slice(1).map(Number);
+  const corner = at(-150, -150);
+  const far = at(750, 550);
+  near(south, corner.lat, 2e-5);
+  near(west, corner.lon, 2e-5);
+  near(north, far.lat, 2e-5);
+  near(east, far.lon, 2e-5);
 });

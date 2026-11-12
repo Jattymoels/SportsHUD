@@ -22,6 +22,10 @@
         <input type="file" id="files" accept=".gpx,application/gpx+xml,text/xml" multiple>
       </label>
     </section>
+    <section class="bar" aria-label="Map lookup">
+      <button id="lookup" type="button">Look up water and toilets near this route</button>
+      <span class="note" id="lookupNote">Asks OpenStreetMap's public query service, which is sent the area the route covers. Nothing is asked until you press this.</span>
+    </section>
     <p id="message" role="status" hidden></p>
 
     <div class="grid">
@@ -57,6 +61,8 @@
           <li><span class="key dot wait"></span>A place past runs waited</li>
           <li><span class="key band climb"></span>A climb to know about</li>
           <li><span class="key tick"></span>A turn</li>
+          <li><span class="key square water"></span>Water</li>
+          <li><span class="key square toilets"></span>Toilets</li>
           <li><span class="key line here"></span>Where you are</li>
         </ul>
         <div id="chart" class="plot chart"></div>
@@ -70,6 +76,8 @@
       </section>
     </div>
   </main>
+
+  <footer class="credit">Water points and toilets, when looked up, are © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>.</footer>
 
   <script type="module" src="route.js"></script>
 </body>

@@ -11,8 +11,14 @@
 // Where the runner is along the route comes from the engine, as everywhere
 // else. Which way the head faces comes from the device's motion sensors with
 // no compass: the engine keeps it true from the way the runner is going.
+//
+// The ghost may be a saved run on its own route, or one that only holds a
+// pace, on any route at all. For that one there is no route to draw along:
+// the ghost is placed ahead on a straight line the way the runner is going,
+// by GPS, until their way joins the route of a saved run, whose ghost then
+// takes over on its own route for as long as they stay on it.
 
-import { ghostFromFixes, paceProfile, createProgressTracker, createRunSession, deviceAxes, mountFrom, headPose, angleBetween, createTravelAnchor, bearingAlong } from '../../engine/index.js';
+import { ghostFromFixes, paceProfile, createProgressTracker, createRunSession, deviceAxes, mountFrom, headPose, angleBetween, createTravelAnchor, bearingAlong, createWayOfTravel, straightAhead } from '../../engine/index.js';
 import { drawScene } from '../preview/scene.js';
 import { clock, km, pace } from '../ghost/hud.js';
 import { loadRuns, saveRuns, loadSettings, saveSettings, fixesOf, runFromGpx, runFromLink, loadSample } from '../ghost/store.js';
@@ -25,13 +31,16 @@ const HOLD = 2000; // milliseconds two fingers must stay down to stop wearing, w
 const $ = (id) => document.getElementById(id);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const wrap = (degrees) => ((degrees % 360) + 360) % 360;
+const turnTo = (from, to) => ((((to - from) % 360) + 540) % 360) - 180; // the short way round, degrees
 const seconds = () => performance.now() / 1000;
 
 const state = {
   runs: loadRuns(),
   settings: { layout: 'single', fov: 30, lift: 0, trim: 0, spread: 0, mirror: false, upturn: false, ...loadSettings('ar') },
-  course: null, // { route, profile, label }: the chosen route and the ghost on it
+  course: null, // the ghost chosen: { route, profile, label } on a route, or { any, secondsPerKm, tracks, label } for a pace on any route
   tracker: null, // progress along the route before the ghost starts
+  way: createWayOfTravel(), // which way the runner is going, by GPS: all there is to go by with no route
+  wayShown: null, // that bearing as drawn, eased so that the picture does not jerk at each fix
   session: null, // the run, once the ghost is started
   source: null,
   demo: null, // { fixes, speed } when replaying a sample run
@@ -50,6 +59,7 @@ const state = {
   kept: 0, // readings from an earlier visit still held in the browser's storage
   test: null, // { began } during a head test: recording only, no route and nothing drawn
   hold: null, // when two fingers went down, while touches are otherwise ignored
+  here: null, // where the last picture was drawn from
 };
 
 function parsePace(text) {
@@ -73,20 +83,39 @@ function listRuns() {
   if (state.runs.some((r) => r.id === chosen)) select.value = chosen;
 }
 
-/** Set up the chosen route and ghost, back at lining up. */
+/** Set up the chosen ghost, back at lining up. */
 function setCourse() {
+  const kind = $('ghostKind').value;
   const run = state.runs.find((r) => r.id === $('run').value);
-  $('paceBox').hidden = $('ghostKind').value !== 'pace';
+  $('paceBox').hidden = kind === 'run';
+  $('runBox').hidden = kind === 'any';
   state.session = null;
   state.gaze = null;
-  $('go').textContent = 'Line up and start the ghost';
+  $('go').textContent = kind === 'any' ? 'Start the ghost' : 'Line up and start the ghost';
+  const secondsPerKm = parsePace($('ghostPace').value);
+  if (kind === 'any') {
+    // A pace, on any route. Every saved run comes along: where today's way
+    // joins one of their routes, that run's ghost takes over until they part.
+    const tracks = [];
+    for (const saved of state.runs) {
+      try {
+        const { route, ghost } = ghostFromFixes(fixesOf(saved), saved.pauses);
+        tracks.push({ route, profile: ghost, label: `ghost: ${saved.demo ? 'the sample run' : saved.from != null ? `${saved.from || 'a friend'}'s run` : `your run of ${dateLabel(saved.startedAt)}`}` });
+      } catch {
+        // A saved run that cannot be laid out is left behind.
+      }
+    }
+    state.course = { any: true, secondsPerKm: secondsPerKm ?? 300, tracks, label: `ghost ${clock(secondsPerKm ?? 300)} /km` };
+    state.tracker = null;
+    openSource();
+    return;
+  }
   if (!run) {
     state.course = null;
     return;
   }
   const { route, ghost } = ghostFromFixes(fixesOf(run), run.pauses);
-  const secondsPerKm = parsePace($('ghostPace').value);
-  const setPace = $('ghostKind').value === 'pace' && secondsPerKm;
+  const setPace = kind === 'along' && secondsPerKm;
   state.course = {
     route,
     profile: setPace ? paceProfile(route.length, secondsPerKm) : ghost,
@@ -101,11 +130,15 @@ function setCourse() {
 function onFix(fix) {
   state.gpsError = null;
   state.lastFix = { ...fix, at: performance.now() };
+  state.way.update({ ...fix, t: seconds() });
   record('g', [fix.lat, 6], [fix.lon, 6], [fix.accuracy, 1], [fix.gpsHeading, 1], [fix.gpsSpeed, 2], [fix.altitude, 1], [fix.stamp ? Date.now() - fix.stamp : null, 0]);
   if (!state.course) return;
   if (state.session) state.session.update({ ...fix, t: fix.t ?? state.source.elapsed() });
-  else state.tracker.update({ ...fix, t: seconds() });
+  else state.tracker?.update({ ...fix, t: seconds() });
   learnFromTravel();
+  // With no route there was nothing to line up to at the start. A few
+  // seconds after setting off there is: the way the runner is going.
+  if (state.session && state.course.any && state.axes && !state.mount && state.way.at(seconds()).settled) lineUpTo(state.way.at().bearing);
 }
 
 function openSource() {
@@ -116,18 +149,37 @@ function openSource() {
   state.source.open();
 }
 
-/** Where we are on the route right now, from the run or from before it. */
-function position() {
-  if (state.session) {
-    const r = state.session.at(state.source.elapsed());
-    return r && { dist: r.routeDist, speed: r.speed, offRoute: r.offRoute, reading: r };
-  }
-  const p = state.tracker?.at(seconds());
-  return p && { dist: p.dist, speed: Math.max(0, p.speed), offRoute: p.offRoute, reading: null };
-}
+/** The bearing of a route at a place along it, degrees. */
+const bearingOn = (route, dist) => bearingAlong(route, Math.min(dist, route.length - 2), Math.min(route.length, dist + 10));
 
-/** The bearing of the route where we are, degrees. */
-const routeBearing = (here) => bearingAlong(state.course.route, Math.min(here.dist, state.course.route.length - 2), Math.min(state.course.route.length, here.dist + 10));
+/**
+ * Where we are right now, and what there is to draw along: the route and how
+ * far along it we and the ghost are, the way it runs here, and the reading
+ * from the run once the ghost has started. With a pace ghost on no route,
+ * `standIn` says the route is only a straight line the way we are going.
+ */
+function position() {
+  const c = state.course;
+  if (!c.any) {
+    if (state.session) {
+      const r = state.session.at(state.source.elapsed());
+      return r && { route: c.route, dist: r.routeDist, ghostDist: r.ghostDist, speed: r.speed, offRoute: r.offRoute, reading: r, bearing: bearingOn(c.route, r.routeDist), label: c.label, standIn: false };
+    }
+    const p = state.tracker?.at(seconds());
+    return p && { route: c.route, dist: p.dist, ghostDist: null, speed: Math.max(0, p.speed), offRoute: p.offRoute, reading: null, bearing: bearingOn(c.route, p.dist), label: c.label, standIn: false };
+  }
+  const r = state.session ? state.session.at(state.source.elapsed()) : null;
+  if (!state.lastFix || (state.session && !r)) return null;
+  const taken = r && r.racing === 'recording' && r.routeDist != null ? c.tracks[r.track] : null;
+  if (taken) {
+    // On the route of a saved run: its ghost has taken over, and there is a real route to draw along.
+    return { route: taken.route, dist: r.routeDist, ghostDist: r.ghostDist, speed: r.speed, offRoute: false, reading: r, bearing: bearingOn(taken.route, r.routeDist), label: taken.label, standIn: false };
+  }
+  const bearing = state.wayShown ?? state.way.at().bearing ?? 0;
+  const lead = r ? -r.distGap : 0; // metres the ghost is ahead
+  const { route, at } = straightAhead(state.lastFix, bearing, { behind: 30, ahead: Math.max(400, lead + 60) });
+  return { route, dist: at, ghostDist: r ? at + lead : null, speed: r ? r.speed : 0, offRoute: false, reading: r, bearing, label: c.label, standIn: true };
+}
 
 // ------------------------------------------------------------------- head --
 
@@ -169,25 +221,35 @@ function onMotion(event) {
   record('m', [a.x, 3], [a.y, 3], [a.z, 3], [r.alpha, 2], [r.beta, 2], [r.gamma, 2]);
 }
 
-/** On each fix while moving along the route: the way we are going says where north is. */
+/** On each fix while moving: the way we are going says where north is. */
 function learnFromTravel() {
   const here = position();
   if (!here) return;
-  const bearing = routeBearing(here);
-  if (state.axes && !here.offRoute) state.anchor.travel(bearing, here.speed, seconds());
+  // On a route, the route says which way we are going. On none, GPS does, while we are under way.
+  const way = state.way.at(seconds());
+  const going = here.standIn ? (way.moving ? way.bearing : null) : here.offRoute ? null : here.bearing;
+  if (state.axes && going != null) state.anchor.travel(going, here.speed, seconds());
   const kept = state.anchor.at(seconds());
-  record('h', [kept?.yaw, 2], [kept?.offset, 2], [bearing, 2], [here.dist, 1], [here.speed, 2], [here.reading ? here.reading.ghostDist - here.dist : null, 1]);
+  record('h', [kept?.yaw, 2], [kept?.offset, 2], [going ?? here.bearing, 2], [here.reading ? here.reading.distance : here.dist, 1], [here.speed, 2], [here.ghostDist == null ? null : here.ghostDist - here.dist, 1]);
 }
 
 /**
- * The wearer is looking level along the route, and says so. That fixes how
- * the device sits on the head and which way the route runs, both at once.
+ * The wearer is looking level along the way they are going, and says so.
+ * That fixes how the device sits on the head and which way is which, both
+ * at once. On a route it can be done standing at the start. With no route
+ * there is nothing to line up to until the runner is under way, so a tap
+ * before then only starts the ghost, and the lining up follows by itself.
  */
 async function lineUp() {
   await askForSensors();
   const here = state.course && position();
   if (!here) return;
-  const bearing = routeBearing(here);
+  if (!here.standIn) lineUpTo(here.bearing);
+  else if (state.way.at(seconds()).settled) lineUpTo(state.way.at().bearing);
+  if (!state.session) startGhost();
+}
+
+function lineUpTo(bearing) {
   if (state.axes) {
     // How the device sits is two things. Which way is up, any reading gives.
     // Which way round it is, only a compass-tied reading gives: the other
@@ -205,7 +267,6 @@ async function lineUp() {
   }
   state.look = 0;
   set('trim', 0);
-  if (!state.session) startGhost();
 }
 
 /** iPhones hand over motion readings only when asked for from a tap. */
@@ -221,12 +282,13 @@ async function askForSensors() {
 
 /** Which way to draw for: the head as the sensors have it, kept true by travel, with the wearer's own adjustments. */
 function facing(here) {
-  if (state.axes && state.head) {
+  // With no route, the sensors are not believed until they have been lined up: there is nothing else to say which way round the device is.
+  if (state.axes && state.head && (state.mount || !here.standIn)) {
     const kept = state.anchor.at(seconds());
     return { yaw: (kept.yaw + state.settings.trim) * RAD, pitch: state.head.pitch + state.settings.lift * RAD, roll: state.head.roll };
   }
   // No sensors (a desk, or the sample run): look along the path, and let a drag turn the head.
-  const along = routeBearing(here) * RAD;
+  const along = here.bearing * RAD;
   state.gaze = state.gaze == null ? along : state.gaze + angleBetween(state.gaze, along) * 0.1;
   return { yaw: state.gaze + state.look + state.settings.trim * RAD, pitch: (-5 + state.settings.lift) * RAD, roll: 0 };
 }
@@ -243,8 +305,9 @@ async function keepAwake() {
 }
 
 function startGhost() {
-  if (!state.course || state.session) return;
-  state.session = createRunSession({ ghost: { kind: 'track', route: state.course.route, profile: state.course.profile } });
+  const c = state.course;
+  if (!c || state.session) return;
+  state.session = createRunSession({ ghost: c.any ? { kind: 'pace', secondsPerKm: c.secondsPerKm, tracks: c.tracks } : { kind: 'track', route: c.route, profile: c.profile } });
   state.source.begin();
   if (!state.demo && state.lastFix && performance.now() - state.lastFix.at < 3000) {
     state.session.update({ lat: state.lastFix.lat, lon: state.lastFix.lon, accuracy: state.lastFix.accuracy, t: 0 });
@@ -456,7 +519,11 @@ function frame() {
     state.hold = null;
     wear(false);
   }
+  // The way of travel as drawn follows the way of travel as measured a little behind, smoothly.
+  const way = state.way.at(seconds());
+  if (way.bearing != null) state.wayShown = state.wayShown == null ? way.bearing : wrap(state.wayShown + turnTo(state.wayShown, way.bearing) * 0.1);
   const here = state.course && position();
+  state.here = here; // for tests and the console: what was drawn from
   if (!state.course) notice('Choose a route, or add a GPX of a past run.');
   else if (!here) notice(state.gpsError ?? 'Waiting for GPS…');
   else {
@@ -469,24 +536,29 @@ function frame() {
     }
     const pose = facing(here);
     const r = here.reading;
+    const lead = here.ghostDist == null ? 0 : here.ghostDist - here.dist;
     for (const side of pair ? [-1, 1] : [0]) {
-      drawScene(eyeCtx, w, H, state.course.route, {
+      drawScene(eyeCtx, w, H, here.route, {
         dist: here.dist,
         ...pose,
         fov: settings.fov,
         unit: w / 520,
         world: false,
         eye: (side * EYES_APART) / 2,
-        ghostDist: r ? r.ghostDist : null,
+        ghostDist: here.ghostDist,
         timeGap: r ? r.timeGap : 0,
         speed: here.speed,
         time: r ? r.time : 0,
         distance: r ? r.distance : 0,
         paused: r ? r.paused : false,
-        ghostLabel: state.course.label,
+        ghostLabel: here.label,
         style: 'anchored',
         display: null,
         markerEvery: 500,
+        // A pace ghost has no route of its own to mark: the gates count the runner's own distance.
+        gates: state.course.any ? ownGates(here) : undefined,
+        // And on no route at all, the line is only the way the runner is going: draw it as far as the ghost, not as if it knew the road.
+        lineTo: here.standIn ? clamp(lead, 15, 60) : undefined,
         readouts: Boolean(r),
       });
       // Seen in a mirror, the left of the screen is on the right: the pictures change places as well as turning over.
@@ -503,12 +575,29 @@ function frame() {
     }
     const tips = [];
     if (here.offRoute) tips.push('You are off this route: progress is held until you rejoin it.');
-    if (!state.session) tips.push(state.axes ? 'Stand on the route and look level along it, then tap.' : 'Tap to start the ghost.');
-    else if (state.axes && !state.mount) tips.push('Look level along the route, then tap.');
+    if (!state.session) tips.push(!state.axes ? 'Tap to start the ghost.' : state.course.any ? 'Tap to start the ghost, then set off looking where you are going: it lines up by itself after a few seconds.' : 'Stand on the route and look level along it, then tap.');
+    else if (state.axes && !state.mount) tips.push(state.course.any ? 'Lining up as you set off: look where you are going.' : 'Look level along the route, then tap.');
     notice(tips.join(' ') || null);
   }
   showStatus(here);
   requestAnimationFrame(frame);
+}
+
+/**
+ * Gates for a ghost that has no route of its own: one at each half kilometre
+ * of the runner's own distance, placed that far ahead. On a straight
+ * stand-in only the near ones are shown, since the road may not go that way.
+ */
+function ownGates(here) {
+  const r = here.reading;
+  if (!r) return [];
+  const gates = [];
+  for (let mark = Math.ceil((r.distance + 2) / 500) * 500, n = 0; n < 2; mark += 500, n++) {
+    const away = mark - r.distance;
+    if (here.standIn && away > 150) break;
+    gates.push({ d: here.dist + away, label: mark % 1000 === 0 ? `${mark / 1000} km` : `${(mark / 1000).toFixed(1)} km`, major: mark % 1000 === 0 });
+  }
+  return gates;
 }
 
 function showStatus(here) {
@@ -522,8 +611,9 @@ function showStatus(here) {
     const taken = Math.abs(kept.offset) < 0.5 ? 'nothing taken off yet' : `${Math.abs(kept.offset).toFixed(0)}° taken off for wander`;
     parts.push(`Head by motion sensors${state.relative ? ', no compass' : ''}: ${state.mount ? `lined up; facing ${Math.round(wrap(kept.yaw + state.settings.trim))}°, ${taken}.` : 'not lined up yet.'}`);
   }
-  if (here) parts.push(`${Math.round(here.dist)} m along the route.`);
   const r = here?.reading;
+  if (here && !state.course.any) parts.push(`${Math.round(here.dist)} m along the route.`);
+  else if (r) parts.push(`${km(r.distance)} km run. ${here.standIn ? 'On no saved route: the ghost is placed the way you are going.' : `On the route of a saved run: ${here.label} has taken over.`}`);
   if (r) parts.push(Math.abs(r.timeGap) < 0.5 ? 'Level with the ghost.' : `${Math.round(Math.abs(r.timeGap))} s ${r.timeGap > 0 ? 'ahead of' : 'behind'} the ghost.`);
   if (state.log && state.session) parts.push(`Recording: ${(state.log.rows.length - 1).toLocaleString()} readings.`);
   const text = parts.join(' ');
@@ -599,17 +689,22 @@ function openLink() {
 
 async function init() {
   const params = new URLSearchParams(location.search);
-  const sample = ['run', 'ride', 'walk'].includes(params.get('demo')) ? params.get('demo') : null;
+  const sample = ['run', 'ride', 'walk', 'shared'].includes(params.get('demo')) ? params.get('demo') : null;
+  // "ghost=pace" is the pace ghost on any route; "ghost=along" a pace along a saved run's route.
+  const asked = { pace: 'any', along: 'along', run: 'run' }[params.get('ghost')] ?? null;
   if (sample) {
     try {
       const { mine, theirs } = await loadSample(sample);
       state.demo = { fixes: fixesOf(mine), speed: clamp(Number(params.get('speed')) || 5, 1, 30) };
-      state.runs = [theirs, ...state.runs];
+      // A plain sample with the pace ghost stands for a first run, anywhere: nothing saved to go by.
+      // The "shared" sample has a saved run whose route today's run joins and leaves.
+      if (asked !== 'any' || sample === 'shared') state.runs = [theirs, ...state.runs];
     } catch (error) {
       notice(`Could not load the sample run: ${error.message}`);
     }
   }
-  if (params.get('ghost') === 'pace') $('ghostKind').value = 'pace';
+  // With nothing saved, the pace ghost is the one that works anywhere, at once.
+  $('ghostKind').value = asked ?? (sample === 'shared' || !state.runs.length ? 'any' : 'run');
   if (parsePace(params.get('pace') ?? '')) $('ghostPace').value = params.get('pace');
   for (const name of Object.keys(RANGES)) set(name, state.settings[name]);
   for (const name of ['layout', 'mirror', 'upturn', 'guard']) set(name, state.settings[name]);

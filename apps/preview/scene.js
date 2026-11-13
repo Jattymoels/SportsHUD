@@ -5,7 +5,7 @@
 // ground, the path, posts beside it. Over that goes what the glasses add,
 // drawn as light, and only inside the part of your view the display covers.
 
-import { smoothPoint } from '../../engine/index.js';
+import { smoothPoint, ghostForm } from '../../engine/index.js';
 import { ghostGlyph, drawRun, clock, pace, INK, AHEAD, BEHIND, FONT } from '../ghost/hud.js';
 import { describe, metres } from '../route/screen.js';
 
@@ -22,6 +22,19 @@ square.height = 600;
 
 /** The point `d` metres along the route, with GPS wobble averaged out: the engine's, under the name used here. */
 export const steady = smoothPoint;
+
+// How strongly things placed in the world are showing on each canvas drawn
+// on, eased towards what the engine asks for: fading out as the runner stops
+// and back as they set off takes most of a second, never a blink.
+const showing = new WeakMap();
+function easedShow(canvas, target) {
+  const now = performance.now();
+  const was = showing.get(canvas) ?? { value: target, at: now };
+  const dt = Math.min(0.25, (now - was.at) / 1000);
+  const value = was.value + (target - was.value) * (1 - Math.exp(-dt / 0.3));
+  showing.set(canvas, { value, at: now });
+  return value;
+}
 
 /** Sample distances ahead of the runner: close together near, spreading out far. */
 function ahead(from, to, reach) {
@@ -46,6 +59,10 @@ function ahead(from, to, reach) {
  * @param {'anchored'|'square'} v.style what the glasses draw
  * @param {{w:number, h:number}|null} v.display degrees of view the display covers; null for all of it
  * @param {number} v.markerEvery metres between distance markers
+ * @param {Array<{d:number, label:string, major:boolean}>} [v.gates] the gates to stand across the path, each `d` metres
+ *   along the route, in place of the route's own markers and finish: for a
+ *   path with no end, or markers that count the runner's distance and not the route's
+ * @param {number} [v.lineTo] metres ahead the line along the path is drawn; 150 unless told
  * @param {Array<{kind:string, dist:number}>} [v.features] turns, likely waits
  *   and climbs along the route, from the engine's route guide; a sign is
  *   placed in the world at each
@@ -166,6 +183,19 @@ export function drawScene(ctx, W, H, route, v) {
     ctx.fillText(string, x, y);
   };
 
+  // How the ghost is drawn at this distance on a display this tall, and how
+  // strongly anything placed in the world shows: right down while stopped.
+  const form = ghostForm({
+    lead: v.ghostDist == null ? null : v.ghostDist - v.dist,
+    speed: v.speed,
+    paused: v.paused,
+    running: v.readouts ?? true,
+    displayTall: (2 * Math.atan(box.h / 2 / focal)) / RAD,
+  });
+  const show = easedShow(ctx.canvas, form.world);
+  /** Light for something placed in the world: its own strength, less whatever the world is faded by. */
+  const light = (strength) => (ctx.globalAlpha = strength * show);
+
   ctx.save();
   ctx.beginPath();
   ctx.rect(box.x, box.y, box.w, box.h);
@@ -187,14 +217,15 @@ export function drawScene(ctx, W, H, route, v) {
     ctx.strokeStyle = GUIDE;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
+    const reach = v.lineTo ?? 150;
     for (const [from, to, alpha, width] of [[4, 60, 0.8, 3.5], [60, 150, 0.4, 2]]) {
-      ctx.globalAlpha = alpha;
+      light(alpha);
       ctx.lineWidth = width * u;
       ctx.beginPath();
       let drawing = false;
       for (const sample of samples) {
         const away = sample.d - v.dist;
-        if (!sample.centre || away < from || away > to + 8) {
+        if (!sample.centre || away < from || away > Math.min(to + 8, reach)) {
           drawing = false;
           continue;
         }
@@ -204,12 +235,12 @@ export function drawScene(ctx, W, H, route, v) {
       }
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    light(1);
 
     // A gate across the path at each marker, and at the finish.
-    const gates = [];
-    for (let d = v.markerEvery; d < route.length - 30; d += v.markerEvery) gates.push({ d, label: d % 1000 === 0 ? `${d / 1000} km` : `${(d / 1000).toFixed(1)} km`, major: d % 1000 === 0 });
-    gates.push({ d: route.length, label: 'FINISH', major: true });
+    const gates = v.gates ? [...v.gates] : [];
+    for (let d = v.markerEvery; !v.gates && d < route.length - 30; d += v.markerEvery) gates.push({ d, label: d % 1000 === 0 ? `${d / 1000} km` : `${(d / 1000).toFixed(1)} km`, major: d % 1000 === 0 });
+    if (!v.gates) gates.push({ d: route.length, label: 'FINISH', major: true });
     for (const gate of gates) {
       const away = gate.d - v.dist;
       if (away < 2 || away > 450) continue;
@@ -223,7 +254,7 @@ export function drawScene(ctx, W, H, route, v) {
       const corners = [[-half, 0], [-half, tall], [half, tall], [half, 0]].map(([s, z]) => project(c.x + nx * s, c.y + ny * s, z));
       if (corners.some((p) => !p)) continue;
       ctx.strokeStyle = MARKER;
-      ctx.globalAlpha = gate.major ? 1 : 0.75;
+      light(gate.major ? 1 : 0.75);
       ctx.lineWidth = Math.max(1.5 * u, ((gate.major ? 0.1 : 0.07) * focal) / corners[0].depth);
       ctx.beginPath();
       ctx.moveTo(corners[0].x, corners[0].y);
@@ -233,7 +264,7 @@ export function drawScene(ctx, W, H, route, v) {
       const size = Math.max(14 * u, Math.min(54 * u, (0.75 * focal) / top.depth));
       write(gate.label, top.x, top.y - size * 0.45, size, { fill: MARKER });
       if (away > 25) write(`${Math.round(away / 5) * 5} m`, top.x, top.y - size * 1.5, Math.max(11 * u, size * 0.6), { fill: MARKER, weight: 400 });
-      ctx.globalAlpha = 1;
+      light(1);
     }
 
     // A sign at each thing the route guide knows about: chevrons across the
@@ -287,32 +318,52 @@ export function drawScene(ctx, W, H, route, v) {
       write(label, top.x, top.y - size * 0.45, size, { fill: tint });
     }
 
-    // The ghost, standing on the path where it is.
+    // The ghost, standing on the path where it is. Close up it would not
+    // fit, so there it is a mark at the shoulder instead: the engine says
+    // how much of each to draw.
     const lead = v.ghostDist == null ? null : v.ghostDist - v.dist; // metres the ghost is ahead of you
-    if (lead != null && lead > 1.2) {
+    if (form.where === 'ahead') {
       const g = steady(route, v.ghostDist);
       const feet = project(g.x, g.y, 0);
-      if (inBox(feet)) {
+      if (feet && form.shoulder > 0) {
+        // Its head and shoulders, a fixed size, rising from the bottom edge
+        // in the direction it is, kept clear of the numbers in the corners.
+        light(form.shoulder);
+        const height = box.h * 0.42;
+        const x = Math.max(box.x + box.w * 0.3, Math.min(box.x + box.w * 0.7, feet.x));
+        ghostGlyph(ctx, x, box.y + box.h + height * 0.52, height, color, 0.22);
+        write(`${Math.round(lead)} m`, x + height * 0.36 + 10 * u, box.y + box.h - height * 0.2, Math.max(14 * u, Math.min(30 * u, height * 0.22)), { fill: color, align: 'left' });
+      }
+      light(form.figure);
+      if (form.figure <= 0) {
+        // Nothing of the figure to draw.
+      } else if (inBox(feet)) {
         const height = Math.max(12 * u, (1.75 * focal) / feet.depth);
         const bob = v.paused ? 0 : Math.sin(performance.now() / 260) * height * 0.03;
         ghostGlyph(ctx, feet.x, feet.y + bob, height, color, 0.22);
         // Its distance, beside it, where a gate's label will not sit.
         const size = Math.max(14 * u, Math.min(30 * u, height * 0.3));
         write(`${Math.round(lead)} m`, feet.x + height * 0.36 + 10 * u, feet.y - height * 0.45, size, { fill: color, align: 'left' });
-      } else if (feet) {
-        // Out of the display's reach: point to it from the nearest edge.
+      } else if (feet && form.shoulder === 0) {
+        // Out of the display's reach: point to it from the nearest edge. (Not
+        // while the mark at the shoulder is showing: then it is below the
+        // display because it is close, not off to one side.)
         const leftward = feet.x < W / 2;
         const x = leftward ? box.x + 16 * u : box.x + box.w - 16 * u;
         const y = Math.max(box.y + 30 * u, Math.min(box.y + box.h - 70 * u, feet.y - 40 * u));
         write(leftward ? '◀' : '▶', x, y + 8 * u, 24 * u, { fill: color });
         write(`${Math.round(lead)} m`, leftward ? x + 20 * u : x - 20 * u, y + 7 * u, 18 * u, { fill: color, align: leftward ? 'left' : 'right' });
-      } else {
+      }
+      if (!feet) {
         // Ahead on the route but behind your head, round a bend: point the way.
+        light(1);
         const g2 = Math.atan2(g.x - here.x, g.y - here.y) - v.yaw;
         const leftward = Math.sin(g2) < 0;
         write(leftward ? '◀' : '▶', leftward ? box.x + 16 * u : box.x + box.w - 16 * u, H / 2 + 8 * u, 24 * u, { fill: color });
       }
     }
+    // What follows is fixed in the view, and stays lit whatever the world does.
+    ctx.globalAlpha = 1;
 
     // Fixed in your view, small, along the bottom where the road is nearest:
     // the gap, your pace, and the ghost if it is behind you.

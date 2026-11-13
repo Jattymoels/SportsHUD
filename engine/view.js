@@ -129,3 +129,55 @@ export function coverage(route, lead, display, options) {
   }
   return places ? { shown: shown / places, whole: whole / places, longestGap, tall: tall / places } : { shown: 0, whole: 0, longestGap: 0, tall: 0 };
 }
+
+// ------------------------------------------------- how the ghost is drawn --
+
+export const FORM_DEFAULTS = {
+  beside: 1.2, // metres either way within which the ghost is level with the runner, and not drawn on the road
+  fits: 0.75, // the share of the display's height a standing figure may fill
+  crowded: 0.9, // the share at which the figure has given way entirely to the mark at the shoulder
+  still: 0.5, // m/s: slower than this, the runner has stopped
+  faint: 0.1, // how much of everything placed in the world is left showing while stopped
+};
+
+/**
+ * How the ghost, and everything else placed in the world, should be drawn
+ * right now. Two rules.
+ *
+ * Close up, a figure does not fit. At 5 m it stands 20 degrees tall, more
+ * than a small display covers, so it would be cut off at head and feet and
+ * would sit over the ground the runner is about to tread. As it nears that
+ * size it gives way to a mark at the shoulder: only its head and shoulders,
+ * a fixed size, rising from the bottom edge of the display in the direction
+ * it is. That still says where it is and how close, and leaves the road
+ * clear. The change is a fade from one to the other, so that a ghost
+ * hovering at the distance where they swap does not flicker.
+ *
+ * Stopped, the world comes first. A figure in the view at a road crossing
+ * is a hazard. When the runner stops, or the clock is paused, everything
+ * placed in the world fades right down, and comes back when they move.
+ *
+ * @param {object} now
+ * @param {number|null} now.lead metres the ghost is ahead; null if there is none
+ * @param {number} now.speed the runner's, m/s
+ * @param {boolean} now.paused whether the runner's clock is stopped
+ * @param {boolean} now.running whether a run is on; before one, nothing fades, since lining up is done standing still
+ * @param {number} now.displayTall degrees the display covers, top to bottom
+ * @param {Partial<typeof FORM_DEFAULTS & typeof VIEW_DEFAULTS>} [options]
+ * @returns {{where:'none'|'ahead'|'beside'|'behind', figure:number, shoulder:number, world:number}}
+ *   figure, shoulder: how strongly to draw each, 0 to 1; they sum to 1 when
+ *   the ghost is ahead. world: how strongly things placed in the world should
+ *   show, 0 to 1; a target to ease towards over a second or so, not to jump to.
+ */
+export function ghostForm({ lead, speed, paused, running, displayTall }, options) {
+  const o = { ...VIEW_DEFAULTS, ...FORM_DEFAULTS, ...options };
+  const world = running && (paused || !(speed >= o.still)) ? o.faint : 1;
+  if (lead == null) return { where: 'none', figure: 0, shoulder: 0, world };
+  if (lead < -o.beside) return { where: 'behind', figure: 0, shoulder: 0, world };
+  if (lead <= o.beside) return { where: 'beside', figure: 0, shoulder: 0, world };
+  // How much of the display's height the figure would fill, standing at that distance.
+  const tall = (Math.atan2(o.eye, lead) + Math.atan2(o.tall - o.eye, lead)) * DEG;
+  const share = tall / displayTall;
+  const shoulder = Math.max(0, Math.min(1, (share - o.fits) / (o.crowded - o.fits)));
+  return { where: 'ahead', figure: 1 - shoulder, shoulder, world };
+}

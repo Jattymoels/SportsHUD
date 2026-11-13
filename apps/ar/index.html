@@ -27,17 +27,18 @@
       <p id="status" role="status"></p>
 
       <div class="row">
-        <label>Route
-          <select id="run"></select>
-        </label>
         <label>Ghost
           <select id="ghostKind">
-            <option value="run">That run itself</option>
-            <option value="pace">A set pace along it</option>
+            <option value="any">A set pace, on any route</option>
+            <option value="run">A saved run, on its own route</option>
+            <option value="along">A set pace, along a saved run's route</option>
           </select>
         </label>
-        <label id="paceBox" hidden>Pace per km
+        <label id="paceBox">Pace per km
           <input id="ghostPace" type="text" inputmode="numeric" value="5:00" size="5" autocomplete="off">
+        </label>
+        <label id="runBox" hidden>Route
+          <select id="run"></select>
         </label>
       </div>
       <label class="file">Add a route (GPX of a past run)
@@ -101,9 +102,11 @@
           <li><b>On glasses that run web pages:</b> open this page on them. Set how much of your view the display covers.</li>
           <li><b>With a phone in a see-through visor:</b> set the pictures to suit the visor (one or two, flipped if it shows the screen in a mirror), then "Wear it".</li>
           <li><b>Lining up:</b> stand on the route, look level along it, and tap the picture or press Enter. That tells it how the device sits on your head and which way the route runs. Tap again whenever the line has wandered off the road.</li>
+          <li><b>A pace ghost needs no route.</b> It holds its pace wherever you run, and is drawn ahead of you the way you are going. There is nothing to line up to at the start, so tap to start, set off looking where you are going, and it lines up by itself after a few seconds. Where your way joins the route of a saved run, that run's ghost takes over on its own route until you leave it.</li>
+          <li><b>Close up and stopped.</b> Nearer than about 7 m the ghost is too tall to fit, and becomes a head and shoulders at the bottom of the picture. When you stop, everything placed in the world fades right down, and comes back as you set off.</li>
           <li><b>Keys,</b> for glasses or a small remote: Enter lines up. Left and right turn the picture a degree. Up and down raise and lower it.</li>
           <li>Routes come from runs saved by <a href="../ghost/">Ghost run</a> on this device, a GPX added here, or a link someone sent.</li>
-          <li><a href="?demo=run&amp;speed=5">Try it without going anywhere</a>: a sample run. Drag to turn your head.</li>
+          <li>Try it without going anywhere, on a sample run: <a href="?demo=run&amp;speed=5&amp;ghost=pace&amp;pace=5:20">a pace ghost with no route</a>, <a href="?demo=shared&amp;speed=5&amp;pace=5:20">a pace ghost that hands over to a saved run</a> where the two routes meet, or <a href="?demo=run&amp;speed=5">a saved run on its own route</a>. Drag to turn your head.</li>
         </ul>
       </details>
       <p><a href="../../">SportsHUD</a></p>

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildRoute, sight, onDisplay, coverage, bearingAlong } from '../index.js';
+import { buildRoute, sight, onDisplay, coverage, bearingAlong, ghostForm } from '../index.js';
 import { path } from './helpers.js';
 
 const near = (actual, expected, tolerance, label = '') =>
@@ -53,4 +53,43 @@ test('over a route: a centred display shows a ghost ahead nearly always, and los
   assert.ok(corner.longestGap > 0 && corner.longestGap <= 60, `longest ${corner.longestGap} m, on the way into the corner`);
   // The same display off to one side shows nothing at all.
   assert.equal(coverage(STRAIGHT, 20, { ...display, right: 20 }).shown, 0);
+});
+
+// ------------------------------------------------- how the ghost is drawn --
+
+const running = (lead, more = {}) => ghostForm({ lead, speed: 3, paused: false, running: true, displayTall: 18, ...more });
+
+test('far enough off, the ghost is a figure; close up, a mark at the shoulder; and it fades between the two', () => {
+  assert.deepEqual(running(20), { where: 'ahead', figure: 1, shoulder: 0, world: 1 });
+  assert.deepEqual(running(8), { where: 'ahead', figure: 1, shoulder: 0, world: 1 });
+  // On a display 18 degrees tall the figure fills three quarters of it at about 7.5 m, and nine tenths at about 6.2 m.
+  const between = running(6.8);
+  assert.ok(between.figure > 0.2 && between.figure < 0.8, `part figure at 6.8 m: ${between.figure}`);
+  near(between.figure + between.shoulder, 1, 1e-9);
+  assert.deepEqual(running(5), { where: 'ahead', figure: 0, shoulder: 1, world: 1 });
+  assert.deepEqual(running(2), { where: 'ahead', figure: 0, shoulder: 1, world: 1 });
+  // Never a jump: a step of 10 cm changes the mix by a little.
+  for (let lead = 5; lead < 9; lead += 0.1) assert.ok(Math.abs(running(lead).figure - running(lead + 0.1).figure) < 0.12, `at ${lead.toFixed(1)} m`);
+});
+
+test('a taller display keeps the figure until it is closer', () => {
+  assert.equal(running(5, { displayTall: 42 }).figure, 1, 'at 5 m it fits a display 42 degrees tall');
+  assert.equal(running(2, { displayTall: 42 }).shoulder, 1, 'at 2 m it does not');
+  assert.equal(running(10, { displayTall: 10 }).shoulder, 1, 'and a display 10 degrees tall gives up on it at 10 m');
+});
+
+test('level with the runner or behind, there is no figure on the road', () => {
+  assert.equal(running(0.5).where, 'beside');
+  assert.equal(running(-0.5).where, 'beside');
+  assert.equal(running(-6).where, 'behind');
+  assert.equal(running(null).where, 'none');
+  for (const lead of [0.5, -6, null]) assert.deepEqual([running(lead).figure, running(lead).shoulder], [0, 0]);
+});
+
+test('stopped or paused, everything placed in the world fades right down; before a run, nothing does', () => {
+  assert.equal(running(20).world, 1);
+  assert.equal(running(20, { speed: 0.2 }).world, 0.1, 'standing at a crossing');
+  assert.equal(running(20, { paused: true }).world, 0.1, 'clock paused, whatever the speed says');
+  assert.equal(running(20, { speed: 0.2, running: false }).world, 1, 'lining up, standing still: the line must show');
+  assert.equal(running(null, { speed: 0 }).world, 0.1, 'the line and the gates fade too, ghost or no ghost');
 });

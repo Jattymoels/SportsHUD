@@ -23,8 +23,10 @@ const most = (values) => sorted(values)[Math.floor(values.length * 0.95)];
  * @param {boolean} [how.linedUp] whether the wearer faced along the route and said so before setting off
  * @param {number} [how.lean] degrees the wearer looks to one side, from `leanFrom` to `leanUntil` seconds
  * @param {Array<[number, number, number]>} [how.upsets] moments a compass is thrown: [from, to, degrees]
+ * @param {[number, number]} [how.jump] a moment the device starts measuring its heading from somewhere new: [at, degrees]
+ * @param {[number, number, number]} [how.stare] a long look far to one side: [from, to, degrees]
  */
-function wear({ seconds = 600, start = 137, drift = 1.5, linedUp = true, lean = 0, leanFrom = 120, leanUntil = 300, bob = 3, speed = 3, seed = 1, upsets = [], options } = {}) {
+function wear({ seconds = 600, start = 137, drift = 1.5, linedUp = true, lean = 0, leanFrom = 120, leanUntil = 300, bob = 3, speed = 3, seed = 1, upsets = [], jump = null, stare = null, options } = {}) {
   const rnd = noise(seed);
   const gauss = () => rnd() + rnd() + rnd();
   // A corner every 50 to 80 seconds, four seconds to get round each.
@@ -38,9 +40,10 @@ function wear({ seconds = 600, start = 137, drift = 1.5, linedUp = true, lean = 
     return from;
   };
   const glanceAt = (t) => (t % 23 > 10 && t % 23 < 12 ? (Math.floor(t / 23) % 2 ? 40 : -40) : 0);
-  const trueAt = (t) => travelAt(t) + glanceAt(t) + (t >= leanFrom && t < leanUntil ? lean : 0) + bob * Math.sin(2 * Math.PI * 2.8 * t);
+  const stareAt = (t) => (stare && t >= stare[0] && t < stare[1] ? stare[2] : 0);
+  const trueAt = (t) => travelAt(t) + glanceAt(t) + stareAt(t) + (t >= leanFrom && t < leanUntil ? lean : 0) + bob * Math.sin(2 * Math.PI * 2.8 * t);
   // The device's own yaw: true, from an arbitrary start, wandering steadily and a little unsteadily.
-  const ownAt = (t) => trueAt(t) + start + (drift * t) / 60 + 1.5 * Math.sin((2 * Math.PI * t) / 170);
+  const ownAt = (t) => trueAt(t) + start + (drift * t) / 60 + 1.5 * Math.sin((2 * Math.PI * t) / 170) + (jump && t >= jump[0] ? jump[1] : 0);
   const upsetAt = (t) => upsets.reduce((sum, [from, to, by]) => sum + (t >= from && t < to ? by : 0), 0);
 
   const anchor = createTravelAnchor(options);
@@ -66,7 +69,7 @@ function wear({ seconds = 600, start = 137, drift = 1.5, linedUp = true, lean = 
       off.anchor.push(Math.abs(turn(truth, anchor.at().yaw)));
       off.at.push(t);
       off.fuser.push(Math.abs(turn(truth, fuser.at(t).yaw)));
-      off.raw.push(Math.abs(turn(truth, ownAt(t) - start)));
+      off.raw.push(Math.abs(turn(truth, ownAt(t) - start - (jump && t >= jump[0] ? jump[1] : 0))));
     }
   }
   return { off, anchor };
@@ -113,6 +116,30 @@ test('the known weakness: looking to one side for minutes is taken for wander, u
   assert.ok(before < 2.5);
   assert.ok(late > 6 && late < 14, `while looking aside ${late}`);
   assert.ok(after < 3, `afterwards ${after}`);
+});
+
+test('if the device starts measuring its heading from somewhere new, it is lost for half a minute and then finds north again', (t) => {
+  // Four minutes in, the device's heading jumps by 120 degrees, as when its sensors are restarted. Every comparison
+  // with the way of travel is then far out. Taken one at a time each looks like a glance aside, and would be for ever.
+  const { off } = wear({ jump: [240, 120], seed: 11 });
+  const during = (from, to) => median(off.anchor.filter((_, i) => off.at[i] >= from && off.at[i] < to));
+  const [before, lost, after] = [during(120, 240), during(242, 262), during(300, 600)];
+  t.diagnostic(`typical error before the jump ${before.toFixed(1)}°, in the 20 s after it ${lost.toFixed(0)}°, from a minute after it ${after.toFixed(1)}°`);
+  assert.ok(before < 2.5);
+  assert.ok(lost > 100, 'lost at first: nothing could tell this from a long look aside yet');
+  assert.ok(after < 3, `afterwards ${after}`);
+  // Without starting afresh it never comes back.
+  const stuck = wear({ jump: [240, 120], seed: 11, options: { lostAfter: Infinity } }).off;
+  assert.ok(median(stuck.anchor.filter((_, i) => stuck.at[i] >= 300)) > 100);
+});
+
+test('a long look far to one side, short of half a minute, is still only a look', (t) => {
+  // Twenty seconds looking 50 degrees aside: every comparison is left out, as before, and nothing is learned from them.
+  const { off } = wear({ stare: [200, 220, 50], seed: 13 });
+  const during = (from, to) => median(off.anchor.filter((_, i) => off.at[i] >= from && off.at[i] < to));
+  t.diagnostic(`typical error during a 20 s look 50° aside ${during(202, 220).toFixed(1)}°, in the minute after ${during(220, 280).toFixed(1)}°`);
+  assert.ok(during(202, 220) < 4, 'the heading shown still follows the head truly');
+  assert.ok(during(220, 280) < 3);
 });
 
 test('before anything is known it passes the device heading through and says so', () => {

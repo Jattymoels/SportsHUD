@@ -24,6 +24,7 @@ export const HEADING_DEFAULTS = {
   glance: 30, // degrees: a compass further than this from the way of travel is a look aside, not an error
   startAfter: 6, // readings of travel to gather before trusting the first estimate of the error
   steadyTurn: 12, // degrees a second: turning faster than this, the direction of travel is changing too fast to compare
+  lostAfter: Infinity, // comparisons in a row, each further than a glance from what was learned, before learning starts afresh; never, for a compass
 };
 
 /** The short way round from one bearing to another, -180 to 180: positive is clockwise. */
@@ -44,6 +45,7 @@ function createLearner(o) {
   let known = false;
   let first = null; // the first comparison, which the early ones are measured from so that none wraps round
   let early = [];
+  let far = 0; // comparisons in a row that were further than a glance from what has been learned
   /** The difference at time `t`, carried on from when it was last learned by the rate it was growing at. */
   const at = (t) => (o.learnDrift && seenAt != null && t != null ? error + rate * Math.min(o.carry, Math.max(0, t - seenAt)) : error);
   return {
@@ -59,6 +61,7 @@ function createLearner(o) {
         if (early.length < o.startAfter) return false;
         error = first + median(early);
         known = true;
+        first = null;
         early = [];
         seenAt = t;
         return true;
@@ -67,7 +70,21 @@ function createLearner(o) {
       const out = turn(expected, seen);
       error = expected;
       seenAt = t;
-      if (Math.abs(out) > o.glance) return false;
+      if (Math.abs(out) > o.glance) {
+        // One of these is a look aside. A long unbroken run of them is not:
+        // what was learned no longer holds, as when the device starts
+        // measuring its heading from somewhere new. Then begin again, with
+        // this comparison as the first, and keep the old answer until the
+        // new one is ready.
+        if (++far >= o.lostAfter) {
+          known = false;
+          first = seen;
+          early = [0];
+          far = 0;
+        }
+        return false;
+      }
+      far = 0;
       if (o.learnDrift) {
         // Following a difference that grows steadily: lean on each comparison
         // twice as hard, and let what is left over say how fast it is growing.
@@ -80,7 +97,9 @@ function createLearner(o) {
     set(value, t) {
       error = value;
       known = true;
+      first = null;
       early = [];
+      far = 0;
       seenAt = t ?? seenAt;
     },
   };
@@ -172,6 +191,7 @@ export const ANCHOR_DEFAULTS = {
   learnDrift: true, // also learn how fast that difference is growing: a gyroscope's wander is steady over minutes
   fastest: 0.2, // degrees a second: no wander faster than this is believed
   carry: 120, // seconds the difference is carried on by its rate when nothing new is learned, as at a long wait
+  lostAfter: 30, // half a minute of running with every comparison far out: longer than anyone looks that far aside
 };
 
 /**

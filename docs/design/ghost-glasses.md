@@ -57,10 +57,12 @@ On made-up sensors, over ten minutes round streets with head bob and glances asi
 
 At 20 m, 1.2° is 0.4 m sideways and 2.7° is 0.9 m: the ghost stays on a path.
 
-**The known weakness.** It takes where the head points, on average, to be where the runner is going. Run for three minutes looking 12° to one side, at someone beside you, and the heading follows the head: the test measures 13.5° of error by the third minute, back to 0.7° two minutes after looking ahead again. Two ways out, neither built:
+**The known weakness.** It takes where the head points, on average, to be where the runner is going. Run for three minutes looking 12° to one side, at someone beside you, and the heading follows the head: the test measures 13.5° of error by the third minute, back to 0.7° two minutes after looking ahead again. Two ways out:
 
-- **The stride says where the body is going.** Each footfall brakes and pushes the body along its direction of travel, and a motion sensor on the head feels that. The direction of that push, in the head's own frame, is the angle between head and body, wherever the eyes are. This is an idea to test, not a result: it needs recordings from a real head, which the AR page can now make.
+- **The stride says where the body is going.** Each footfall brakes and pushes the body along its direction of travel, and a motion sensor on the head feels that. The direction of that push, in the head's own frame, is the angle between head and body, wherever the eyes are. `engine/stride.js` does this. It is built and tested on made-up running only: there it is typically 1° to 2° out, and with its help the heading stays within about 2° through a minute of looking 35° aside, against 16° to 26° without. On a real head a nod, or steps that do not match, may spoil it; on made-up signals of assumed size a nodding head made it read 30° as 22°. A head test, read by `tools/head.mjs`, is what will say.
 - **Cameras.** `engine/align.js` finds north by lining the device's tracked path up with GPS. That does not care where the runner looks. It needs a camera and a bigger chip, so it belongs to a later, heavier version.
+
+A look further aside than about 30° does not pull the heading at all: it is taken for a glance and left out. The weakness is a head held a little aside for a long time.
 
 ### 3. The picture has to be drawn on the glasses
 
@@ -150,12 +152,15 @@ This stage needs an electronics engineer and someone who has built with waveguid
 | North from a camera's tracking and GPS | `engine/align.js` | Made-up walks and runs |
 | The AR page: only what glasses add, for one eye or two, mirrored or not | `apps/ar/` | A headless browser with made-up head sensors that wander 6° a minute |
 | A recorder for real head-sensor data | `apps/ar/` | The same |
+| The body's direction of travel, felt in the stride | `engine/stride.js` | Made-up running, with a nodding head and an uneven gait as named risks |
+| Reading a head test: wander, heading error, look aside, stride, compass | `tools/head.mjs` | Made-up recordings whose truth is known |
 | A run as a link, to get a route onto glasses with no files | `engine/share.js` | Unit tests; the owner's recordings |
 
 ## What is not known
 
 - Whether any of it works on a head. Everything above is simulation.
 - Whether the motion sensors in real glasses wander as slowly as assumed.
+- Whether the stride gives a clean enough line on a real head to hold the heading through a look aside.
 - Whether a browser on any of these glasses passes on motion readings and position.
 - How bright the display must be on a sunlit road. One review calls 600 nits dim outdoors beside a 5,000-nit display; nothing found measures it for running.
 - Whether a display in one eye is comfortable for an hour.

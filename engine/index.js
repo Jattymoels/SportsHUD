@@ -62,3 +62,4 @@ export { HEADING_DEFAULTS, ANCHOR_DEFAULTS, createHeadingFuser, createTravelAnch
 export { ALIGN_DEFAULTS, createAligner } from './align.js';
 export { SHARE_DEFAULTS, thinFixes, trimEnds, packRun, unpackRun } from './share.js';
 export { VIEW_DEFAULTS, smoothPoint, bearingAlong, sight, onDisplay, coverage } from './view.js';
+export { STRIDE_DEFAULTS, headFrame, strideLine, createStrideDirection } from './stride.js';

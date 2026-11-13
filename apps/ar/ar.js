@@ -37,6 +37,7 @@ const state = {
   demo: null, // { fixes, speed } when replaying a sample run
   axes: null, // the device's own axes at its latest reading; null if it reports none
   relative: false, // readings not tied to a compass have been seen, and are the ones used
+  north: null, // { axes, at, written }: the device's axes by its latest compass-tied reading, where it gives one
   mount: null, // how the device sits on the head, known once lined up
   anchor: createTravelAnchor(), // keeps the heading true from the way of travel
   head: null, // { yaw, pitch, roll } of the head by the device's own reckoning, radians
@@ -141,7 +142,18 @@ function onOrientation(event) {
   if (event.alpha == null || event.beta == null || event.gamma == null) return;
   // Two kinds of reading may arrive: one tied to the compass and one not.
   // The one that is not is smoother and nothing nearby can throw it, and
-  // the way of travel supplies north; so once seen, it is the one used.
+  // the way of travel supplies north; so once seen, it is the one the
+  // heading is kept by. The compass-tied kind is kept for one thing: it
+  // alone says which way round the device is (see lineUp). It is written
+  // down too, ten times a second, so that a recording shows how good the
+  // compass was.
+  const compass = event.absolute ? event.alpha : event.webkitCompassHeading != null ? 360 - event.webkitCompassHeading : null;
+  if (compass != null) {
+    const now = seconds();
+    const written = state.north && now - state.north.written < 0.1 ? state.north.written : now;
+    if (written === now) record('a', [compass, 2], [event.beta, 2], [event.gamma, 2]);
+    state.north = { axes: deviceAxes(compass, event.beta, event.gamma), at: now, written };
+  }
   if (event.absolute && state.relative) return;
   if (!event.absolute) state.relative = true;
   state.axes = deviceAxes(event.alpha, event.beta, event.gamma);
@@ -177,7 +189,15 @@ async function lineUp() {
   if (!here) return;
   const bearing = routeBearing(here);
   if (state.axes) {
-    state.mount = mountFrom(state.axes, bearing);
+    // How the device sits is two things. Which way is up, any reading gives.
+    // Which way round it is, only a compass-tied reading gives: the other
+    // kind measures heading from wherever it happened to start, so "facing
+    // 20 degrees" would pick out the wrong part of the device, and a nod of
+    // the head would be drawn as part nod, part tilt. A compass some degrees
+    // out does little harm to that. With no compass-tied reading at all, the
+    // heading is still kept rightly; only nods and tilts are mixed.
+    const northed = state.north && seconds() - state.north.at < 2;
+    state.mount = mountFrom(northed ? state.north.axes : state.axes, bearing);
     state.head = headPose(state.axes, state.mount);
     state.anchor = createTravelAnchor();
     state.anchor.orientation(wrap(state.head.yaw / RAD), seconds());
@@ -248,7 +268,7 @@ function stopGhost() {
 // every few seconds, copied into the browser's storage, so that a reload or
 // a dropped tab part-way through a run loses a few seconds and not the run.
 
-const HEADER = '# kind,seconds,then by kind: o alpha,beta,gamma,absolute | m ax,ay,az (gravity included, m/s2),turn rates alpha,beta,gamma (deg/s) | g lat,lon,accuracy,heading by GPS,speed by GPS,altitude,age of fix (ms) | h heading shown,offset taken off,route bearing,metres along,speed,ghost lead';
+const HEADER = '# kind,seconds,then by kind: o alpha,beta,gamma,absolute | a alpha,beta,gamma by the compass | m ax,ay,az (gravity included, m/s2),turn rates alpha,beta,gamma (deg/s) | g lat,lon,accuracy,heading by GPS,speed by GPS,altitude,age of fix (ms) | h heading shown,offset taken off,route bearing,metres along,speed,ghost lead';
 
 /** Start writing down, or carry on from where an earlier start in this visit left off. */
 function beginLog(why) {

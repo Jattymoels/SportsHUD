@@ -37,7 +37,7 @@ What it says:
 - A display the size of today's, moved to straight ahead, goes from never showing the ghost to nearly always.
 - Going from 30° to 70° buys a few per cent. A 30° display is enough.
 - When the ghost is off the display it is round a corner. That is what the edge cue (B5) is for.
-- At 5 m the ghost stands 20° tall and fits no small display. Inside about 7 m it has to be drawn differently, as a marker at the shoulder rather than a figure.
+- At 5 m the ghost stands 20° tall and fits no small display. Inside about 7 m it is drawn differently: a head and shoulders rising from the bottom of the picture, fading in as the figure fades out. Built, in `ghostForm`.
 
 ### 2. Heading with no compass and no camera
 
@@ -155,6 +155,8 @@ This stage needs an electronics engineer and someone who has built with waveguid
 | The body's direction of travel, felt in the stride | `engine/stride.js` | Made-up running, with a nodding head and an uneven gait as named risks |
 | Reading a head test: wander, heading error, look aside, stride, compass | `tools/head.mjs` | Made-up recordings whose truth is known |
 | A run as a link, to get a route onto glasses with no files | `engine/share.js` | Unit tests; the owner's recordings |
+| The pace ghost in the view with no recorded route | `engine/travel.js`, `apps/ar/` | Unit tests; a headless browser on sample runs |
+| How the ghost is drawn close up, and the fade when stopped | `ghostForm` in `engine/view.js` | Unit tests; pictures at a range of distances |
 
 ## What is not known
 
@@ -164,7 +166,7 @@ This stage needs an electronics engineer and someone who has built with waveguid
 - Whether a browser on any of these glasses passes on motion readings and position.
 - How bright the display must be on a sunlit road. One review calls 600 nits dim outdoors beside a 5,000-nit display; nothing found measures it for running.
 - Whether a display in one eye is comfortable for an hour.
-- Whether a figure in the view is safe at a road crossing. The ghost should fade when the runner stops; that is a rule to write, not yet written.
+- Whether a figure in the view is safe at a road crossing. One rule is built: when the runner stops, everything placed in the world fades to a tenth within a second. Whether that is enough is a question for wearing it, and for someone who knows road safety.
 - What a display engine kit costs.
 
 ## Sources

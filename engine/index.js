@@ -61,5 +61,6 @@ export { COURSE_DEFAULTS, courseFromOsm, holeAt, nearestOnLine } from './course.
 export { HEADING_DEFAULTS, ANCHOR_DEFAULTS, createHeadingFuser, createTravelAnchor, turnRate } from './heading.js';
 export { ALIGN_DEFAULTS, createAligner } from './align.js';
 export { SHARE_DEFAULTS, thinFixes, trimEnds, packRun, unpackRun } from './share.js';
-export { VIEW_DEFAULTS, smoothPoint, bearingAlong, sight, onDisplay, coverage } from './view.js';
+export { VIEW_DEFAULTS, FORM_DEFAULTS, smoothPoint, bearingAlong, sight, onDisplay, coverage, ghostForm } from './view.js';
+export { TRAVEL_DEFAULTS, createWayOfTravel, straightAhead } from './travel.js';
 export { STRIDE_DEFAULTS, headFrame, strideLine, createStrideDirection } from './stride.js';
